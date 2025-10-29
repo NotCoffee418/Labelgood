@@ -1,0 +1,236 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5.0.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5.0.0
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4.3.0
+        with:
+          path: ~/.cargo/registry
+          key: ${{ runner.os }}-cargo-registry-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo index
+        uses: actions/cache@v4.3.0
+        with:
+          path: ~/.cargo/git
+          key: ${{ runner.os }}-cargo-index-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Cache cargo build
+        uses: actions/cache@v4.3.0
+        with:
+          path: src-tauri/target
+          key: ${{ runner.os }}-cargo-build-target-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Install Tauri dependencies (Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Run tests
+        run: cargo test --manifest-path=src-tauri/Cargo.toml
+
+  build-linux:
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            arch: amd64
+          - target: aarch64-unknown-linux-gnu
+            arch: arm64
+          - target: armv7-unknown-linux-gnueabihf
+            arch: armv7
+    steps:
+      - uses: actions/checkout@v5.0.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5.0.0
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Add Rust target
+        run: rustup target add ${{ matrix.target }}
+
+      - name: Install cross-compilation tools
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-aarch64-linux-gnu
+
+      - name: Install cross-compilation tools
+        if: matrix.target == 'armv7-unknown-linux-gnueabihf'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y gcc-arm-linux-gnueabihf
+
+      - name: Install Tauri dependencies (Linux)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
+      - name: Cache cargo
+        uses: actions/cache@v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build binary
+        env:
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
+          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
+        run: |
+          cargo build --release --manifest-path=src-tauri/Cargo.toml --target ${{ matrix.target }}
+          mkdir -p dist/${{ matrix.arch }}
+          cp src-tauri/target/${{ matrix.target }}/release/labelgood dist/${{ matrix.arch }}/
+          tar -czf labelgood-${{ github.ref_name }}-linux-${{ matrix.arch }}.tar.gz -C dist/${{ matrix.arch }} labelgood
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: labelgood-linux-${{ matrix.arch }}
+          path: labelgood-${{ github.ref_name }}-linux-${{ matrix.arch }}.tar.gz
+
+  build-windows:
+    needs: test
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5.0.0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5.0.0
+        with:
+          node-version: "20"
+          cache: "npm"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build frontend
+        run: npm run build
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4.3.0
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Build binary
+        run: |
+          cargo build --release --manifest-path=src-tauri/Cargo.toml
+          mkdir dist
+          copy src-tauri\target\release\labelgood.exe dist\
+          Compress-Archive -Path dist\labelgood.exe -DestinationPath labelgood-${{ github.ref_name }}-windows-amd64.zip
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4.6.2
+        with:
+          name: labelgood-windows-amd64
+          path: labelgood-${{ github.ref_name }}-windows-amd64.zip
+
+  release:
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v5.0.0
+
+      - name: Get version
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Download Linux AMD64 artifact
+        uses: actions/download-artifact@v5.0.0
+        with:
+          name: labelgood-linux-amd64
+          path: artifacts
+
+      - name: Download Linux ARM64 artifact
+        uses: actions/download-artifact@v5.0.0
+        with:
+          name: labelgood-linux-arm64
+          path: artifacts
+
+      - name: Download Linux ARMv7 artifact
+        uses: actions/download-artifact@v5.0.0
+        with:
+          name: labelgood-linux-armv7
+          path: artifacts
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v5.0.0
+        with:
+          name: labelgood-windows-amd64
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          cp artifacts/labelgood-${{ steps.get_version.outputs.VERSION }}-linux-*.tar.gz release-assets/
+          cp artifacts/labelgood-${{ steps.get_version.outputs.VERSION }}-windows-*.zip release-assets/
+
+      - name: Create Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create ${{ github.ref_name }} \
+            --title "Labelgood ${{ steps.get_version.outputs.VERSION }}" \
+            --notes "Release ${{ steps.get_version.outputs.VERSION }}
+
+          ## Downloads
+
+          ### Linux
+          - **AMD64 (x86_64)**: \`labelgood-${{ steps.get_version.outputs.VERSION }}-linux-amd64.tar.gz\`
+          - **ARM64**: \`labelgood-${{ steps.get_version.outputs.VERSION }}-linux-arm64.tar.gz\`  
+          - **ARMv7**: \`labelgood-${{ steps.get_version.outputs.VERSION }}-linux-armv7.tar.gz\`
+
+          Extract with: \`tar -xzf labelgood-${{ steps.get_version.outputs.VERSION }}-linux-<arch>.tar.gz\`
+
+          ### Windows
+          - **AMD64 (x86_64)**: \`labelgood-${{ steps.get_version.outputs.VERSION }}-windows-amd64.zip\`
+
+          Extract with Windows Explorer or: \`Expand-Archive labelgood-${{ steps.get_version.outputs.VERSION }}-windows-amd64.zip\`" \
+            release-assets/*
