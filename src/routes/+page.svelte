@@ -4,7 +4,7 @@
   let height = $state(50);
   let continuousWidth = $state(false);
   let continuousHeight = $state(false);
-  let orientation = $state<"portrait" | "landscape">("landscape");
+  let viewRotation = $state<"normal" | "rotated">("normal");
   
   // Reference to content for measuring
   let contentElement: HTMLDivElement;
@@ -44,21 +44,22 @@
     }
   }
 
-  // Calculate dimensions
+  // Calculate dimensions for the view
+  // When rotated, we swap width and height for the display only
   const renderWidth = $derived(() => {
-    if (continuousWidth) {
-      // Auto-size width based on content
-      return Math.max(width, 10);
-    }
-    return width;
+    const baseWidth = continuousWidth ? Math.max(width, 10) : width;
+    const baseHeight = continuousHeight ? Math.max(height, 10) : height;
+    
+    // Swap dimensions when view is rotated
+    return viewRotation === "rotated" ? baseHeight : baseWidth;
   });
 
   const renderHeight = $derived(() => {
-    if (continuousHeight) {
-      // Auto-size height based on content
-      return Math.max(height, 10);
-    }
-    return height;
+    const baseWidth = continuousWidth ? Math.max(width, 10) : width;
+    const baseHeight = continuousHeight ? Math.max(height, 10) : height;
+    
+    // Swap dimensions when view is rotated
+    return viewRotation === "rotated" ? baseWidth : baseHeight;
   });
 
   function handlePrint() {
@@ -221,6 +222,9 @@
         style="
           width: {renderWidth()}mm; 
           height: {renderHeight()}mm;
+          --print-width: {width}mm;
+          --print-height: {height}mm;
+          --print-rotation: {viewRotation === 'rotated' ? '-90deg' : '0deg'};
         "
         bind:this={contentElement}
         onmousemove={handleMouseMove}
@@ -333,27 +337,28 @@
     </div>
 
     <div class="settings-group">
-      <h3>Print Orientation</h3>
+      <h3>View Rotation</h3>
       <div class="radio-group">
         <label class="radio-label">
           <input 
             type="radio" 
-            name="orientation"
-            value="landscape"
-            bind:group={orientation}
+            name="viewRotation"
+            value="normal"
+            bind:group={viewRotation}
           />
-          Landscape
+          Normal
         </label>
         <label class="radio-label">
           <input 
             type="radio" 
-            name="orientation"
-            value="portrait"
-            bind:group={orientation}
+            name="viewRotation"
+            value="rotated"
+            bind:group={viewRotation}
           />
-          Portrait
+          Rotated 90°
         </label>
       </div>
+      <p class="help-text">Rotates the editing view only. Print dimensions remain unchanged.</p>
     </div>
 
     <div class="settings-group">
@@ -684,6 +689,14 @@
     height: 18px;
   }
 
+  .help-text {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #777;
+    font-style: italic;
+    line-height: 1.4;
+  }
+
   .print-button {
     margin-top: auto;
     padding: 12px 24px;
@@ -738,13 +751,18 @@
       display: block;
     }
 
-    /* Optimize label for printing */
+    /* Optimize label for printing - use original dimensions */
     .label-preview {
       border: none !important;
       box-shadow: none;
       page-break-inside: avoid;
       margin: 0;
       position: relative;
+      /* Reset to original dimensions for print, regardless of view rotation */
+      width: var(--print-width) !important;
+      height: var(--print-height) !important;
+      /* Rotate back if needed for print */
+      transform: rotate(var(--print-rotation)) !important;
     }
 
     /* Hide interactive elements in print */
