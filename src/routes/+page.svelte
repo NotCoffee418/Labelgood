@@ -740,7 +740,7 @@
 
     /* Optimize label for printing */
     .label-preview {
-      border: 1px solid #000;
+      border: none !important;
       box-shadow: none;
       page-break-inside: avoid;
       margin: 0;
