@@ -2,7 +2,8 @@
   // State for label dimensions
   let width = $state(100);
   let height = $state(50);
-  let isContinuous = $state(false);
+  let continuousWidth = $state(false);
+  let continuousHeight = $state(false);
   let orientation = $state<"portrait" | "landscape">("landscape");
   
   // Reference to content for measuring
@@ -27,29 +28,34 @@
   let draggingBox = $state<number | null>(null);
   let dragOffset = $state({ x: 0, y: 0 });
 
-  // Calculate continuous dimensions based on content
-  const actualWidth = $derived(() => {
-    if (orientation === "landscape") {
-      return isContinuous ? Math.max(width, 100) : width;
-    } else {
-      return isContinuous ? Math.max(height, 50) : height;
+  // Handle continuous checkbox mutual exclusion
+  function handleContinuousWidth() {
+    if (continuousWidth) {
+      continuousHeight = false;
     }
-  });
+  }
 
-  const actualHeight = $derived(() => {
-    if (orientation === "landscape") {
-      return isContinuous ? Math.max(height, 30) : height;
-    } else {
-      return isContinuous ? Math.max(width, 80) : width;
+  function handleContinuousHeight() {
+    if (continuousHeight) {
+      continuousWidth = false;
     }
-  });
+  }
 
+  // Calculate dimensions
   const renderWidth = $derived(() => {
-    return actualWidth();
+    if (continuousWidth) {
+      // Auto-size width based on content
+      return Math.max(width, 100);
+    }
+    return width;
   });
 
   const renderHeight = $derived(() => {
-    return actualHeight();
+    if (continuousHeight) {
+      // Auto-size height based on content
+      return Math.max(height, 50);
+    }
+    return height;
   });
 
   function handlePrint() {
@@ -58,13 +64,19 @@
 
   // Drag handlers
   function startDrag(event: MouseEvent, boxId: number) {
+    // Don't start dragging if clicking on the editable text content
+    const target = event.target as HTMLElement;
+    if (target.classList.contains('text-box-content') || target.isContentEditable) {
+      return;
+    }
+    
     event.preventDefault();
     draggingBox = boxId;
     const box = textBoxes.find(b => b.id === boxId);
     if (box) {
       const previewRect = contentElement.getBoundingClientRect();
-      const target = event.currentTarget as HTMLElement;
-      const targetRect = target.getBoundingClientRect();
+      const targetElement = event.currentTarget as HTMLElement;
+      const targetRect = targetElement.getBoundingClientRect();
       dragOffset.x = event.clientX - targetRect.left;
       dragOffset.y = event.clientY - targetRect.top;
     }
@@ -221,9 +233,17 @@
           type="number" 
           bind:value={width} 
           min="1" 
-          disabled={isContinuous}
-          class:grayed-out={isContinuous}
+          disabled={continuousWidth}
+          class:grayed-out={continuousWidth}
         />
+        <label class="checkbox-label">
+          <input 
+            type="checkbox" 
+            bind:checked={continuousWidth}
+            onchange={handleContinuousWidth}
+          />
+          Continuous
+        </label>
       </div>
 
       <div class="dimension-control">
@@ -233,18 +253,16 @@
           type="number" 
           bind:value={height} 
           min="1" 
-          disabled={isContinuous}
-          class:grayed-out={isContinuous}
+          disabled={continuousHeight}
+          class:grayed-out={continuousHeight}
         />
-      </div>
-
-      <div class="dimension-control">
         <label class="checkbox-label">
           <input 
             type="checkbox" 
-            bind:checked={isContinuous}
+            bind:checked={continuousHeight}
+            onchange={handleContinuousHeight}
           />
-          Continuous (Auto-size)
+          Continuous
         </label>
       </div>
     </div>
@@ -447,6 +465,13 @@
     cursor: text;
     min-height: 1em;
     white-space: nowrap;
+    user-select: text;
+  }
+
+  .text-box-content:focus {
+    outline: 2px solid #007bff;
+    outline-offset: 2px;
+    border-radius: 2px;
   }
 
   .settings-panel {
