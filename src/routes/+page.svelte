@@ -27,6 +27,9 @@
   // Dragging state
   let draggingBox = $state<number | null>(null);
   let dragOffset = $state({ x: 0, y: 0 });
+  let resizingLabel = $state(false);
+  let resizeStartPos = $state({ x: 0, y: 0 });
+  let resizeStartDimension = $state(0);
 
   // Handle continuous checkbox mutual exclusion
   function handleContinuousWidth() {
@@ -62,6 +65,39 @@
     alert('Print functionality not yet implemented');
   }
 
+  // Resize handle handlers
+  function startResize(event: MouseEvent) {
+    event.preventDefault();
+    event.stopPropagation();
+    resizingLabel = true;
+    resizeStartPos = { x: event.clientX, y: event.clientY };
+    
+    if (continuousWidth) {
+      resizeStartDimension = width;
+    } else if (continuousHeight) {
+      resizeStartDimension = height;
+    }
+  }
+
+  function handleResizeMove(event: MouseEvent) {
+    if (resizingLabel) {
+      if (continuousWidth) {
+        // Calculate change in pixels and convert to mm (approx 3.78 px per mm at 96 DPI)
+        const deltaX = event.clientX - resizeStartPos.x;
+        const deltaMm = deltaX / 3.78;
+        width = Math.max(50, resizeStartDimension + deltaMm);
+      } else if (continuousHeight) {
+        const deltaY = event.clientY - resizeStartPos.y;
+        const deltaMm = deltaY / 3.78;
+        height = Math.max(20, resizeStartDimension + deltaMm);
+      }
+    }
+  }
+
+  function stopResize() {
+    resizingLabel = false;
+  }
+
   // Drag handlers
   function startDrag(event: MouseEvent, boxId: number) {
     // Don't start dragging if clicking on the editable text content
@@ -83,6 +119,11 @@
   }
 
   function handleMouseMove(event: MouseEvent) {
+    if (resizingLabel) {
+      handleResizeMove(event);
+      return;
+    }
+    
     if (draggingBox !== null) {
       const box = textBoxes.find(b => b.id === draggingBox);
       if (box && contentElement) {
@@ -100,6 +141,7 @@
 
   function stopDrag() {
     draggingBox = null;
+    stopResize();
   }
 
   function addTextBox() {
@@ -215,6 +257,31 @@
             </div>
           </div>
         {/each}
+        
+        <!-- Resize handles for continuous dimensions -->
+        {#if continuousWidth}
+          <div 
+            class="resize-handle resize-handle-right"
+            onmousedown={startResize}
+            title="Drag to resize width"
+            role="button"
+            tabindex="0"
+          >
+            <div class="resize-handle-indicator"></div>
+          </div>
+        {/if}
+        
+        {#if continuousHeight}
+          <div 
+            class="resize-handle resize-handle-bottom"
+            onmousedown={startResize}
+            title="Drag to resize height"
+            role="button"
+            tabindex="0"
+          >
+            <div class="resize-handle-indicator"></div>
+          </div>
+        {/if}
       </div>
     </div>
   </div>
@@ -409,6 +476,54 @@
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
     position: relative;
     min-height: 1em;
+  }
+
+  .resize-handle {
+    position: absolute;
+    background-color: #007bff;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .resize-handle-right {
+    right: -6px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 12px;
+    height: 60px;
+    cursor: ew-resize;
+    border-radius: 6px;
+  }
+
+  .resize-handle-bottom {
+    bottom: -6px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 60px;
+    height: 12px;
+    cursor: ns-resize;
+    border-radius: 6px;
+  }
+
+  .resize-handle:hover {
+    background-color: #0056b3;
+  }
+
+  .resize-handle-indicator {
+    background-color: white;
+    border-radius: 2px;
+  }
+
+  .resize-handle-right .resize-handle-indicator {
+    width: 3px;
+    height: 20px;
+  }
+
+  .resize-handle-bottom .resize-handle-indicator {
+    width: 20px;
+    height: 3px;
   }
 
   .text-box {
