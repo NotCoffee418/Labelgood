@@ -62,7 +62,9 @@
   });
 
   function handlePrint() {
-    alert('Print functionality not yet implemented');
+    // Use the browser's native print dialog
+    // This works cross-platform (Linux, Windows, macOS) and provides print preview
+    window.print();
   }
 
   // Resize handle handlers
@@ -701,5 +703,77 @@
 
   .print-button:active {
     background-color: #004494;
+  }
+
+  /* Print styles - hide everything except the label */
+  @media print {
+    /* Hide all UI controls */
+    h1,
+    .font-controls,
+    .settings-panel {
+      display: none !important;
+    }
+
+    /* Reset body and container for print */
+    :global(body) {
+      background-color: white;
+    }
+
+    .app-container {
+      display: block;
+      height: auto;
+    }
+
+    .main-section {
+      padding: 0;
+      overflow: visible;
+    }
+
+    .preview-container {
+      padding: 0;
+      background: white;
+      box-shadow: none;
+      border-radius: 0;
+      overflow: visible;
+      display: block;
+    }
+
+    /* Optimize label for printing */
+    .label-preview {
+      border: 1px solid #000;
+      box-shadow: none;
+      page-break-inside: avoid;
+      margin: 0;
+      position: relative;
+    }
+
+    /* Hide interactive elements in print */
+    .resize-handle,
+    .delete-btn {
+      display: none !important;
+    }
+
+    /* Remove hover effects and interactions */
+    .text-box {
+      border: none !important;
+      background: transparent !important;
+      cursor: default;
+      padding: 4px;
+    }
+
+    .text-box:hover {
+      border: none !important;
+      background: transparent !important;
+    }
+
+    .text-box-content {
+      cursor: default;
+    }
+
+    /* Ensure text boxes are not editable in print */
+    .text-box-content {
+      user-select: none;
+      -webkit-user-select: none;
+    }
   }
 </style>
