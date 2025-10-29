@@ -2,8 +2,11 @@
   // State for label dimensions
   let width = $state(100);
   let height = $state(50);
-  let continuousWidth = $state(false);
-  let continuousHeight = $state(false);
+  let isContinuous = $state(false);
+  let orientation = $state<"portrait" | "landscape">("landscape");
+  
+  // Reference to content for measuring
+  let contentElement: HTMLDivElement;
 
   // State for font settings
   let fontSize = $state(16);
@@ -15,31 +18,89 @@
   // State for settings
   let rememberSettings = $state(false);
 
-  // Handle continuous checkbox logic
-  function handleContinuousWidth() {
-    if (continuousWidth) {
-      continuousHeight = false;
+  // State for text boxes
+  let textBoxes = $state([
+    { id: 1, x: 10, y: 10, text: "Sample Label Text" }
+  ]);
+
+  // Dragging state
+  let draggingBox = $state<number | null>(null);
+  let dragOffset = $state({ x: 0, y: 0 });
+
+  // Calculate continuous dimensions based on content
+  const actualWidth = $derived(() => {
+    if (orientation === "landscape") {
+      return isContinuous ? Math.max(width, 100) : width;
+    } else {
+      return isContinuous ? Math.max(height, 50) : height;
     }
-  }
+  });
 
-  function handleContinuousHeight() {
-    if (continuousHeight) {
-      continuousWidth = false;
+  const actualHeight = $derived(() => {
+    if (orientation === "landscape") {
+      return isContinuous ? Math.max(height, 30) : height;
+    } else {
+      return isContinuous ? Math.max(width, 80) : width;
     }
-  }
+  });
 
-  // Get the display width/height (shows 0 when continuous)
-  const displayWidth = $derived(continuousWidth ? 0 : width);
-  const displayHeight = $derived(continuousHeight ? 0 : height);
+  const renderWidth = $derived(() => {
+    return actualWidth();
+  });
 
-  // Get actual rendering dimensions (minimum for continuous)
-  const renderWidth = $derived(continuousWidth ? 100 : width);
-  const renderHeight = $derived(continuousHeight ? Math.max(height, fontSize * 1.5) : height);
+  const renderHeight = $derived(() => {
+    return actualHeight();
+  });
 
   function handlePrint() {
     alert('Print functionality not yet implemented');
   }
+
+  // Drag handlers
+  function startDrag(event: MouseEvent, boxId: number) {
+    event.preventDefault();
+    draggingBox = boxId;
+    const box = textBoxes.find(b => b.id === boxId);
+    if (box) {
+      const previewRect = contentElement.getBoundingClientRect();
+      const target = event.currentTarget as HTMLElement;
+      const targetRect = target.getBoundingClientRect();
+      dragOffset.x = event.clientX - targetRect.left;
+      dragOffset.y = event.clientY - targetRect.top;
+    }
+  }
+
+  function handleMouseMove(event: MouseEvent) {
+    if (draggingBox !== null) {
+      const box = textBoxes.find(b => b.id === draggingBox);
+      if (box && contentElement) {
+        const container = contentElement.getBoundingClientRect();
+        const newX = event.clientX - container.left - dragOffset.x;
+        const newY = event.clientY - container.top - dragOffset.y;
+        
+        // Constrain to label bounds
+        box.x = Math.max(0, Math.min(newX, container.width - 50));
+        box.y = Math.max(0, Math.min(newY, container.height - 20));
+        textBoxes = [...textBoxes]; // Trigger reactivity
+      }
+    }
+  }
+
+  function stopDrag() {
+    draggingBox = null;
+  }
+
+  function addTextBox() {
+    const newId = Math.max(...textBoxes.map(b => b.id), 0) + 1;
+    textBoxes = [...textBoxes, { id: newId, x: 20 + (newId * 10), y: 20 + (newId * 10), text: "New Text" }];
+  }
+
+  function deleteTextBox(boxId: number) {
+    textBoxes = textBoxes.filter(b => b.id !== boxId);
+  }
 </script>
+
+<svelte:window onmouseup={stopDrag} />
 
 <div class="app-container">
   <div class="main-section">
@@ -95,6 +156,10 @@
           bind:value={fontColor}
         />
       </div>
+
+      <button class="add-textbox-btn" onclick={addTextBox}>
+        Add Text Box
+      </button>
     </div>
 
     <!-- Label Preview -->
@@ -102,18 +167,42 @@
       <div 
         class="label-preview" 
         style="
-          width: {renderWidth}mm; 
-          height: {renderHeight}mm;
-          font-family: {fontFamily};
-          font-size: {fontSize}px;
-          color: {fontColor};
-          font-weight: {fontWeight};
-          font-style: {fontStyle};
+          width: {renderWidth()}mm; 
+          height: {renderHeight()}mm;
         "
+        bind:this={contentElement}
+        onmousemove={handleMouseMove}
+        role="region"
+        aria-label="Label preview"
       >
-        <div class="label-content" contenteditable="true">
-          Sample Label Text
-        </div>
+        {#each textBoxes as box (box.id)}
+          <div 
+            class="text-box"
+            class:dragging={draggingBox === box.id}
+            style="
+              left: {box.x}px;
+              top: {box.y}px;
+              font-family: {fontFamily};
+              font-size: {fontSize}px;
+              color: {fontColor};
+              font-weight: {fontWeight};
+              font-style: {fontStyle};
+            "
+            onmousedown={(e) => startDrag(e, box.id)}
+            role="button"
+            tabindex="0"
+          >
+            <button 
+              class="delete-btn" 
+              onclick={(e) => {e.stopPropagation(); deleteTextBox(box.id);}}
+              title="Delete text box"
+            >
+              ×
+            </button>
+            <div class="text-box-content" contenteditable="true" bind:textContent={box.text}>
+            </div>
+          </div>
+        {/each}
       </div>
     </div>
   </div>
@@ -132,17 +221,9 @@
           type="number" 
           bind:value={width} 
           min="1" 
-          disabled={continuousWidth}
-          class:grayed-out={continuousWidth}
+          disabled={isContinuous}
+          class:grayed-out={isContinuous}
         />
-        <label class="checkbox-label">
-          <input 
-            type="checkbox" 
-            bind:checked={continuousWidth}
-            onchange={handleContinuousWidth}
-          />
-          Continuous
-        </label>
       </div>
 
       <div class="dimension-control">
@@ -152,16 +233,42 @@
           type="number" 
           bind:value={height} 
           min="1" 
-          disabled={continuousHeight}
-          class:grayed-out={continuousHeight}
+          disabled={isContinuous}
+          class:grayed-out={isContinuous}
         />
+      </div>
+
+      <div class="dimension-control">
         <label class="checkbox-label">
           <input 
             type="checkbox" 
-            bind:checked={continuousHeight}
-            onchange={handleContinuousHeight}
+            bind:checked={isContinuous}
           />
-          Continuous
+          Continuous (Auto-size)
+        </label>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <h3>Orientation</h3>
+      <div class="radio-group">
+        <label class="radio-label">
+          <input 
+            type="radio" 
+            name="orientation"
+            value="landscape"
+            bind:group={orientation}
+          />
+          Landscape
+        </label>
+        <label class="radio-label">
+          <input 
+            type="radio" 
+            name="orientation"
+            value="portrait"
+            bind:group={orientation}
+          />
+          Portrait
         </label>
       </div>
     </div>
@@ -185,6 +292,7 @@
     padding: 0;
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
     background-color: #f5f5f5;
+    color-scheme: light;
   }
 
   .app-container {
@@ -199,6 +307,7 @@
     overflow-y: auto;
     display: flex;
     flex-direction: column;
+    min-height: 0;
   }
 
   h1 {
@@ -236,6 +345,8 @@
     border: 1px solid #ddd;
     border-radius: 4px;
     font-size: 14px;
+    background-color: white;
+    color: #333;
   }
 
   .control-group input[type="color"] {
@@ -244,6 +355,21 @@
     border: 1px solid #ddd;
     border-radius: 4px;
     cursor: pointer;
+  }
+
+  .add-textbox-btn {
+    padding: 6px 12px;
+    background-color: #28a745;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: 500;
+  }
+
+  .add-textbox-btn:hover {
+    background-color: #218838;
   }
 
   .preview-container {
@@ -256,21 +382,71 @@
     border-radius: 8px;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
     overflow: auto;
+    min-height: 0;
   }
 
   .label-preview {
     border: 2px solid #333;
     background: white;
-    padding: 10px;
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-    min-height: 1em;
     position: relative;
+    min-height: 1em;
   }
 
-  .label-content {
+  .text-box {
+    position: absolute;
+    cursor: move;
+    padding: 4px;
+    border: 1px dashed transparent;
+    min-width: 50px;
+    min-height: 20px;
+    user-select: none;
+  }
+
+  .text-box:hover {
+    border-color: #007bff;
+    background-color: rgba(0, 123, 255, 0.05);
+  }
+
+  .text-box.dragging {
+    border-color: #007bff;
+    background-color: rgba(0, 123, 255, 0.1);
+    opacity: 0.8;
+    cursor: grabbing;
+  }
+
+  .delete-btn {
+    position: absolute;
+    top: -8px;
+    right: -8px;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background-color: #dc3545;
+    color: white;
+    border: 2px solid white;
+    font-size: 14px;
+    line-height: 1;
+    cursor: pointer;
+    display: none;
+    padding: 0;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .text-box:hover .delete-btn {
+    display: flex;
+  }
+
+  .delete-btn:hover {
+    background-color: #c82333;
+  }
+
+  .text-box-content {
     outline: none;
     cursor: text;
     min-height: 1em;
+    white-space: nowrap;
   }
 
   .settings-panel {
@@ -318,6 +494,8 @@
     border-radius: 4px;
     font-size: 14px;
     margin-bottom: 8px;
+    background-color: white;
+    color: #333;
   }
 
   .dimension-control input[type="number"]:disabled {
@@ -346,6 +524,28 @@
     height: 18px;
   }
 
+  .radio-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .radio-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    color: #555;
+    cursor: pointer;
+    user-select: none;
+  }
+
+  .radio-label input[type="radio"] {
+    cursor: pointer;
+    width: 18px;
+    height: 18px;
+  }
+
   .print-button {
     margin-top: auto;
     padding: 12px 24px;
@@ -365,48 +565,5 @@
 
   .print-button:active {
     background-color: #004494;
-  }
-
-  @media (prefers-color-scheme: dark) {
-    :global(body) {
-      background-color: #1a1a1a;
-    }
-
-    .main-section,
-    .font-controls,
-    .preview-container,
-    .settings-panel {
-      background-color: #2a2a2a;
-    }
-
-    h1, h2, h3 {
-      color: #f0f0f0;
-    }
-
-    .control-group label,
-    .dimension-control label,
-    .checkbox-label {
-      color: #d0d0d0;
-    }
-
-    .control-group select,
-    .control-group input[type="number"],
-    .dimension-control input[type="number"],
-    .control-group input[type="color"] {
-      background-color: #3a3a3a;
-      color: #f0f0f0;
-      border-color: #4a4a4a;
-    }
-
-    .dimension-control input[type="number"]:disabled,
-    .dimension-control input[type="number"].grayed-out {
-      background-color: #444;
-      color: #888;
-    }
-
-    .label-preview {
-      background: white;
-      border-color: #555;
-    }
   }
 </style>
