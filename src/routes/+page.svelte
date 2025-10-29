@@ -289,7 +289,7 @@
     <h2>Label Settings</h2>
     
     <div class="settings-group">
-      <h3>Dimensions</h3>
+      <h3>Print Dimensions</h3>
       
       <div class="dimension-control">
         <label for="width">Width (mm):</label>
@@ -333,7 +333,7 @@
     </div>
 
     <div class="settings-group">
-      <h3>Orientation</h3>
+      <h3>Print Orientation</h3>
       <div class="radio-group">
         <label class="radio-label">
           <input 
