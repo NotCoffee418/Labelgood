@@ -48,7 +48,7 @@
   const renderWidth = $derived(() => {
     if (continuousWidth) {
       // Auto-size width based on content
-      return Math.max(width, 100);
+      return Math.max(width, 10);
     }
     return width;
   });
@@ -56,7 +56,7 @@
   const renderHeight = $derived(() => {
     if (continuousHeight) {
       // Auto-size height based on content
-      return Math.max(height, 50);
+      return Math.max(height, 10);
     }
     return height;
   });
@@ -87,11 +87,11 @@
         // Calculate change in pixels and convert to mm (approx 3.78 px per mm at 96 DPI)
         const deltaX = event.clientX - resizeStartPos.x;
         const deltaMm = deltaX / 3.78;
-        width = Math.max(50, resizeStartDimension + deltaMm);
+        width = Math.max(10, resizeStartDimension + deltaMm);
       } else if (continuousHeight) {
         const deltaY = event.clientY - resizeStartPos.y;
         const deltaMm = deltaY / 3.78;
-        height = Math.max(20, resizeStartDimension + deltaMm);
+        height = Math.max(10, resizeStartDimension + deltaMm);
       }
       return;
     }
