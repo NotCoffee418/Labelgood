@@ -48,7 +48,7 @@
   const renderWidth = $derived(() => {
     if (continuousWidth) {
       // Auto-size width based on content
-      return Math.max(width, 100);
+      return Math.max(width, 10);
     }
     return width;
   });
@@ -56,13 +56,15 @@
   const renderHeight = $derived(() => {
     if (continuousHeight) {
       // Auto-size height based on content
-      return Math.max(height, 50);
+      return Math.max(height, 10);
     }
     return height;
   });
 
   function handlePrint() {
-    alert('Print functionality not yet implemented');
+    // Use the browser's native print dialog
+    // This works cross-platform (Linux, Windows, macOS) and provides print preview
+    window.print();
   }
 
   // Resize handle handlers
@@ -85,11 +87,11 @@
         // Calculate change in pixels and convert to mm (approx 3.78 px per mm at 96 DPI)
         const deltaX = event.clientX - resizeStartPos.x;
         const deltaMm = deltaX / 3.78;
-        width = Math.max(50, resizeStartDimension + deltaMm);
+        width = Math.max(10, resizeStartDimension + deltaMm);
       } else if (continuousHeight) {
         const deltaY = event.clientY - resizeStartPos.y;
         const deltaMm = deltaY / 3.78;
-        height = Math.max(20, resizeStartDimension + deltaMm);
+        height = Math.max(10, resizeStartDimension + deltaMm);
       }
       return;
     }
@@ -287,7 +289,7 @@
     <h2>Label Settings</h2>
     
     <div class="settings-group">
-      <h3>Dimensions</h3>
+      <h3>Print Dimensions</h3>
       
       <div class="dimension-control">
         <label for="width">Width (mm):</label>
@@ -331,7 +333,7 @@
     </div>
 
     <div class="settings-group">
-      <h3>Orientation</h3>
+      <h3>Print Orientation</h3>
       <div class="radio-group">
         <label class="radio-label">
           <input 
@@ -701,5 +703,75 @@
 
   .print-button:active {
     background-color: #004494;
+  }
+
+  /* Print styles - hide everything except the label */
+  @media print {
+    /* Hide all UI controls */
+    h1,
+    .font-controls,
+    .settings-panel {
+      display: none !important;
+    }
+
+    /* Reset body and container for print */
+    :global(body) {
+      background-color: white;
+    }
+
+    .app-container {
+      display: block;
+      height: auto;
+    }
+
+    .main-section {
+      padding: 0;
+      overflow: visible;
+    }
+
+    .preview-container {
+      padding: 0;
+      background: white;
+      box-shadow: none;
+      border-radius: 0;
+      overflow: visible;
+      display: block;
+    }
+
+    /* Optimize label for printing */
+    .label-preview {
+      border: none !important;
+      box-shadow: none;
+      page-break-inside: avoid;
+      margin: 0;
+      position: relative;
+    }
+
+    /* Hide interactive elements in print */
+    .resize-handle,
+    .delete-btn {
+      display: none !important;
+    }
+
+    /* Remove hover effects and interactions */
+    .text-box {
+      border: none !important;
+      background: transparent !important;
+      cursor: default;
+      padding: 4px;
+    }
+
+    .text-box:hover {
+      border: none !important;
+      background: transparent !important;
+    }
+
+    /* Ensure text boxes are not editable in print */
+    .text-box-content {
+      cursor: default;
+      -moz-user-select: none;
+      -webkit-user-select: none;
+      user-select: none;
+    }
   }
 </style>
