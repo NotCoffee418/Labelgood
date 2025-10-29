@@ -766,14 +766,12 @@
       background: transparent !important;
     }
 
-    .text-box-content {
-      cursor: default;
-    }
-
     /* Ensure text boxes are not editable in print */
     .text-box-content {
-      user-select: none;
+      cursor: default;
+      -moz-user-select: none;
       -webkit-user-select: none;
+      user-select: none;
     }
   }
 </style>
