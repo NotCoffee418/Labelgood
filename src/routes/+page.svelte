@@ -79,7 +79,7 @@
     }
   }
 
-  function handleResizeMove(event: MouseEvent) {
+  function handleGlobalMouseMove(event: MouseEvent) {
     if (resizingLabel) {
       if (continuousWidth) {
         // Calculate change in pixels and convert to mm (approx 3.78 px per mm at 96 DPI)
@@ -91,6 +91,7 @@
         const deltaMm = deltaY / 3.78;
         height = Math.max(20, resizeStartDimension + deltaMm);
       }
+      return;
     }
   }
 
@@ -119,11 +120,6 @@
   }
 
   function handleMouseMove(event: MouseEvent) {
-    if (resizingLabel) {
-      handleResizeMove(event);
-      return;
-    }
-    
     if (draggingBox !== null) {
       const box = textBoxes.find(b => b.id === draggingBox);
       if (box && contentElement) {
@@ -154,7 +150,7 @@
   }
 </script>
 
-<svelte:window onmouseup={stopDrag} />
+<svelte:window onmouseup={stopDrag} onmousemove={handleGlobalMouseMove} />
 
 <div class="app-container">
   <div class="main-section">
