@@ -21,6 +21,11 @@
   // State for settings
   let rememberSettings = $state(false);
 
+  // State for printer selection
+  let printers = $state<string[]>([]);
+  let selectedPrinter = $state<string>("");
+  let printMode = $state<"preview" | "print">("preview"); // preview = open PDF, print = send to printer
+
   // State for text boxes
   let textBoxes = $state([
     { id: 1, x: 10, y: 10, text: "Sample Label Text" }
@@ -68,6 +73,25 @@
     return viewRotation === "rotated" ? actualWidth() : actualHeight();
   });
 
+  // Load available printers on mount
+  async function loadPrinters() {
+    try {
+      const printerList = await invoke<string[]>('list_printers');
+      printers = printerList;
+      if (printerList.length > 0) {
+        selectedPrinter = printerList[0];
+      }
+    } catch (error) {
+      console.error('Failed to load printers:', error);
+      // Don't show an error to the user, just leave printers empty
+    }
+  }
+
+  // Load printers when component mounts
+  $effect(() => {
+    loadPrinters();
+  });
+
   async function handlePrint() {
     try {
       // Generate clean HTML without editorial elements
@@ -79,13 +103,18 @@
       const pdfWidth = viewRotation === "rotated" ? actualHeight() : actualWidth();
       const pdfHeight = viewRotation === "rotated" ? actualWidth() : actualHeight();
 
-      await invoke<string>('generate_pdf', {
+      const result = await invoke<string>('generate_pdf', {
         options: {
           html: printHtml,
           width_mm: pdfWidth,
-          height_mm: pdfHeight
+          height_mm: pdfHeight,
+          printer_name: printMode === "print" ? selectedPrinter : null
         }
       });
+
+      if (printMode === "print") {
+        alert(`Sent to printer: ${result}`);
+      }
     } catch (error) {
       console.error('Failed to generate PDF:', error);
       alert(`Failed to generate PDF: ${error}`);
@@ -462,6 +491,51 @@
     </div>
 
     <div class="settings-group">
+      <h3>Print Mode</h3>
+      <div class="radio-group">
+        <label class="radio-label">
+          <input
+            type="radio"
+            name="printMode"
+            value="preview"
+            bind:group={printMode}
+          />
+          Preview PDF
+        </label>
+        <label class="radio-label">
+          <input
+            type="radio"
+            name="printMode"
+            value="print"
+            bind:group={printMode}
+          />
+          Send to Printer
+        </label>
+      </div>
+    </div>
+
+    {#if printMode === "print"}
+      <div class="settings-group">
+        <h3>Printer</h3>
+        {#if printers.length > 0}
+          <select bind:value={selectedPrinter} class="printer-select">
+            {#each printers as printer}
+              <option value={printer}>{printer}</option>
+            {/each}
+          </select>
+          <button class="refresh-printers-btn" onclick={loadPrinters} title="Refresh printer list">
+            ↻
+          </button>
+        {:else}
+          <p class="no-printers-text">No printers found. Make sure CUPS is running.</p>
+          <button class="refresh-printers-btn" onclick={loadPrinters}>
+            Refresh Printers
+          </button>
+        {/if}
+      </div>
+    {/if}
+
+    <div class="settings-group">
       <label class="checkbox-label">
         <input type="checkbox" bind:checked={rememberSettings} />
         Remember Settings
@@ -469,7 +543,7 @@
     </div>
 
     <button class="print-button" onclick={handlePrint}>
-      Print
+      {printMode === "preview" ? "Generate PDF" : "Print"}
     </button>
   </aside>
 </div>
@@ -794,6 +868,39 @@
     font-size: 12px;
     color: #777;
     font-style: italic;
+    line-height: 1.4;
+  }
+
+  .printer-select {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    background-color: white;
+    color: #333;
+    margin-bottom: 10px;
+  }
+
+  .refresh-printers-btn {
+    padding: 6px 12px;
+    background-color: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: 500;
+  }
+
+  .refresh-printers-btn:hover {
+    background-color: #5a6268;
+  }
+
+  .no-printers-text {
+    font-size: 14px;
+    color: #dc3545;
+    margin-bottom: 10px;
     line-height: 1.4;
   }
 
