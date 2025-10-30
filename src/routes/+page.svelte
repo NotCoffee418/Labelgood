@@ -1,11 +1,13 @@
 <script lang="ts">
+  import { invoke } from '@tauri-apps/api/core';
+
   // State for label dimensions
   let width = $state(100);
   let height = $state(50);
   let continuousWidth = $state(false);
   let continuousHeight = $state(false);
   let viewRotation = $state<"normal" | "rotated">("normal");
-  
+
   // Reference to content for measuring
   let contentElement: HTMLDivElement;
 
@@ -66,35 +68,104 @@
     return viewRotation === "rotated" ? actualWidth() : actualHeight();
   });
 
-  function handlePrint() {
-    // Dynamically update the @page rule with the current label dimensions
-    updatePageRule();
-    
-    // Use the browser's native print dialog
-    // This works cross-platform (Linux, Windows, macOS) and provides print preview
-    window.print();
+  async function handlePrint() {
+    try {
+      // Generate clean HTML without editorial elements
+      const printHtml = generatePrintHtml();
+
+      // Call Tauri backend to generate PDF and open it
+      // The backend handles opening the PDF cross-platform using the opener crate
+      // When rotated, swap width and height for the PDF page dimensions
+      const pdfWidth = viewRotation === "rotated" ? actualHeight() : actualWidth();
+      const pdfHeight = viewRotation === "rotated" ? actualWidth() : actualHeight();
+
+      await invoke<string>('generate_pdf', {
+        options: {
+          html: printHtml,
+          width_mm: pdfWidth,
+          height_mm: pdfHeight
+        }
+      });
+    } catch (error) {
+      console.error('Failed to generate PDF:', error);
+      alert(`Failed to generate PDF: ${error}`);
+    }
   }
 
-  // Update or create a dynamic style element for the @page rule
-  function updatePageRule() {
-    const styleId = 'dynamic-page-size';
-    let styleElement = document.getElementById(styleId) as HTMLStyleElement;
-    
-    if (!styleElement) {
-      styleElement = document.createElement('style');
-      styleElement.id = styleId;
-      document.head.appendChild(styleElement);
-    }
-    
-    // Set the page size based on actual label dimensions
-    // Note: We use the actual dimensions (not rotated) because rotation is
-    // handled via CSS transform, not by swapping the page dimensions
-    styleElement.textContent = `
-      @page {
-        size: ${actualWidth()}mm ${actualHeight()}mm;
+  // Generate clean HTML for printing (without editorial elements)
+  function generatePrintHtml(): string {
+    // Build HTML with inline styles to ensure proper rendering
+    const styles = `
+      * {
         margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+
+      .label-container {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: white;
+        ${viewRotation === "rotated" ? `
+          transform: rotate(-90deg);
+          transform-origin: center center;
+        ` : ''}
+      }
+
+      .text-box {
+        position: absolute;
+        white-space: pre-wrap;
+        word-wrap: break-word;
       }
     `;
+
+    // Build text boxes HTML
+    const textBoxesHtml = textBoxes.map(box => {
+      return `
+        <div class="text-box" style="
+          left: ${box.x}px;
+          top: ${box.y}px;
+          font-family: ${fontFamily};
+          font-size: ${fontSize}px;
+          color: ${fontColor};
+          font-weight: ${fontWeight};
+          font-style: ${fontStyle};
+        ">${escapeHtml(box.text)}</div>
+      `;
+    }).join('');
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>${styles}</style>
+      </head>
+      <body>
+        <div class="label-container">
+          ${textBoxesHtml}
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  // Helper function to escape HTML special characters
+  function escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   // Resize handle handlers
