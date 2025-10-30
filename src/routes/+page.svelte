@@ -44,22 +44,26 @@
     }
   }
 
+  // Calculate actual dimensions (respecting continuous settings)
+  // These are the real dimensions used for printing
+  const actualWidth = $derived(() => {
+    return continuousWidth ? Math.max(width, 10) : width;
+  });
+
+  const actualHeight = $derived(() => {
+    return continuousHeight ? Math.max(height, 10) : height;
+  });
+
   // Calculate dimensions for the view
   // When rotated, we swap width and height for the display only
   const renderWidth = $derived(() => {
-    const baseWidth = continuousWidth ? Math.max(width, 10) : width;
-    const baseHeight = continuousHeight ? Math.max(height, 10) : height;
-    
     // Swap dimensions when view is rotated
-    return viewRotation === "rotated" ? baseHeight : baseWidth;
+    return viewRotation === "rotated" ? actualHeight() : actualWidth();
   });
 
   const renderHeight = $derived(() => {
-    const baseWidth = continuousWidth ? Math.max(width, 10) : width;
-    const baseHeight = continuousHeight ? Math.max(height, 10) : height;
-    
     // Swap dimensions when view is rotated
-    return viewRotation === "rotated" ? baseWidth : baseHeight;
+    return viewRotation === "rotated" ? actualWidth() : actualHeight();
   });
 
   function handlePrint() {
@@ -82,14 +86,12 @@
       document.head.appendChild(styleElement);
     }
     
-    // Set the page size based on current label dimensions
-    // Note: continuous dimensions use the current width/height value
-    const pageWidth = continuousWidth ? Math.max(width, 10) : width;
-    const pageHeight = continuousHeight ? Math.max(height, 10) : height;
-    
+    // Set the page size based on actual label dimensions
+    // Note: We use the actual dimensions (not rotated) because rotation is
+    // handled via CSS transform, not by swapping the page dimensions
     styleElement.textContent = `
       @page {
-        size: ${pageWidth}mm ${pageHeight}mm;
+        size: ${actualWidth()}mm ${actualHeight()}mm;
         margin: 0;
       }
     `;
