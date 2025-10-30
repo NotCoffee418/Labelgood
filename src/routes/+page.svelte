@@ -1,5 +1,6 @@
 <script lang="ts">
   import { invoke } from '@tauri-apps/api/core';
+  import html2canvas from 'html2canvas';
 
   // State for label dimensions
   let width = $state(100);
@@ -94,18 +95,78 @@
 
   async function handlePrint() {
     try {
-      // Generate clean HTML without editorial elements
-      const printHtml = generatePrintHtml();
+      if (!contentElement) {
+        alert('Label preview not ready');
+        return;
+      }
 
-      // Call Tauri backend to generate PDF and open it
-      // The backend handles opening the PDF cross-platform using the opener crate
-      // When rotated, swap width and height for the PDF page dimensions
-      const pdfWidth = viewRotation === "rotated" ? actualHeight() : actualWidth();
-      const pdfHeight = viewRotation === "rotated" ? actualWidth() : actualHeight();
+      // Temporarily hide all interactive elements (delete buttons, resize handles)
+      const deleteButtons = contentElement.querySelectorAll('.delete-btn');
+      const resizeHandles = contentElement.querySelectorAll('.resize-handle');
+      const textBoxes = contentElement.querySelectorAll('.text-box');
+
+      // Hide interactive elements
+      deleteButtons.forEach((btn: Element) => {
+        (btn as HTMLElement).style.display = 'none';
+      });
+      resizeHandles.forEach((handle: Element) => {
+        (handle as HTMLElement).style.display = 'none';
+      });
+      // Remove borders and hover effects from text boxes
+      textBoxes.forEach((box: Element) => {
+        (box as HTMLElement).style.border = 'none';
+        (box as HTMLElement).style.background = 'transparent';
+      });
+
+      // Capture screenshot using html2canvas
+      const canvas = await html2canvas(contentElement, {
+        backgroundColor: '#ffffff',
+        scale: 4, // Very high quality for crisp text
+        logging: false,
+        useCORS: true
+      });
+
+      // Restore interactive elements
+      deleteButtons.forEach((btn: Element) => {
+        (btn as HTMLElement).style.display = '';
+      });
+      resizeHandles.forEach((handle: Element) => {
+        (handle as HTMLElement).style.display = '';
+      });
+      textBoxes.forEach((box: Element) => {
+        (box as HTMLElement).style.border = '';
+        (box as HTMLElement).style.background = '';
+      });
+
+      // Get the actual label dimensions (not rotated for display)
+      const labelWidthMm = actualWidth();
+      const labelHeightMm = actualHeight();
+
+      // Create a new canvas with correct aspect ratio based on mm dimensions
+      const targetCanvas = document.createElement('canvas');
+      const mmToPixel = 11.811; // 300 DPI: 300/25.4 = 11.811 pixels per mm
+      targetCanvas.width = labelWidthMm * mmToPixel;
+      targetCanvas.height = labelHeightMm * mmToPixel;
+
+      const ctx = targetCanvas.getContext('2d');
+      if (!ctx) {
+        throw new Error('Failed to get canvas context');
+      }
+
+      // Draw the captured screenshot onto the new canvas with correct dimensions
+      // This ensures the aspect ratio matches the mm dimensions
+      ctx.drawImage(canvas, 0, 0, targetCanvas.width, targetCanvas.height);
+
+      // Convert canvas to base64 PNG
+      const imageData = targetCanvas.toDataURL('image/png');
+
+      // PDF dimensions are always the actual label dimensions (not view rotation)
+      const pdfWidth = labelWidthMm;
+      const pdfHeight = labelHeightMm;
 
       const result = await invoke<string>('generate_pdf', {
         options: {
-          html: printHtml,
+          image_data: imageData,
           width_mm: pdfWidth,
           height_mm: pdfHeight,
           printer_name: printMode === "print" ? selectedPrinter : null
@@ -123,12 +184,23 @@
 
   // Generate clean HTML for printing (without editorial elements)
   function generatePrintHtml(): string {
+    // Get the actual dimensions of the preview container to calculate scale
+    const previewWidthMm = viewRotation === "rotated" ? actualHeight() : actualWidth();
+    const previewHeightMm = viewRotation === "rotated" ? actualWidth() : actualHeight();
+    const previewWidthPx = contentElement?.offsetWidth || (previewWidthMm * 3.7795275591); // mm to px at 96 DPI
+    const previewHeightPx = contentElement?.offsetHeight || (previewHeightMm * 3.7795275591);
+
     // Build HTML with inline styles to ensure proper rendering
     const styles = `
       * {
         margin: 0;
         padding: 0;
         box-sizing: border-box;
+      }
+
+      @page {
+        margin: 0;
+        padding: 0;
       }
 
       html, body {
@@ -140,16 +212,10 @@
       }
 
       .label-container {
-        position: absolute;
-        top: 0;
-        left: 0;
+        position: relative;
         width: 100%;
         height: 100%;
         background: white;
-        ${viewRotation === "rotated" ? `
-          transform: rotate(-90deg);
-          transform-origin: center center;
-        ` : ''}
       }
 
       .text-box {
@@ -159,12 +225,25 @@
       }
     `;
 
-    // Build text boxes HTML
+    // Build text boxes HTML with proper coordinate transformation
     const textBoxesHtml = textBoxes.map(box => {
+      // Transform coordinates if rotated
+      let printX, printY;
+      if (viewRotation === "rotated") {
+        // When rotated: swap and adjust coordinates
+        // Editor shows: width=height, height=width
+        // We need to transform back to original orientation for PDF
+        printX = box.y;
+        printY = previewWidthPx - box.x;
+      } else {
+        printX = box.x;
+        printY = box.y;
+      }
+
       return `
         <div class="text-box" style="
-          left: ${box.x}px;
-          top: ${box.y}px;
+          left: ${printX}px;
+          top: ${printY}px;
           font-family: ${fontFamily};
           font-size: ${fontSize}px;
           color: ${fontColor};
@@ -648,11 +727,10 @@
   }
 
   .label-preview {
-    border: 2px solid #333;
     background: white;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
     position: relative;
     min-height: 1em;
+    box-shadow: 0 0 0 2px #333;
   }
 
   .resize-handle {
