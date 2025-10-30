@@ -71,8 +71,10 @@ async fn generate_pdf(options: PrintOptions) -> Result<String, String> {
     println!("Generated PDF path: {}", pdf_path_str);
 
     // Use ImageMagick to convert PNG to PDF with exact dimensions
-    // The PNG is already at 300 DPI with correct pixel dimensions
-    // We just need to set the correct page size in the PDF
+    // The PNG comes from frontend at 300 DPI with pixel dimensions calculated as:
+    //   targetWidthPx = labelWidthMm * (300 / 25.4)
+    //   targetHeightPx = labelHeightMm * (300 / 25.4)
+    // We tell ImageMagick the density is 300 DPI and set the page size in points
     let width_points = options.width_mm * 2.83465; // mm to points (1mm = 2.83465pt)
     let height_points = options.height_mm * 2.83465;
 
