@@ -71,14 +71,16 @@ async fn generate_pdf(options: PrintOptions) -> Result<String, String> {
     println!("Generated PDF path: {}", pdf_path_str);
 
     // Use ImageMagick to convert PNG to PDF with exact dimensions
-    // -density 96 matches browser DPI, -units PixelsPerInch ensures proper scaling
+    // The PNG is at 300 DPI, so we need to tell ImageMagick that
+    // Then use -resize to fit it exactly to the target mm dimensions
     let width_points = options.width_mm * 2.83465; // mm to points (1mm = 2.83465pt)
     let height_points = options.height_mm * 2.83465;
 
     let result = Command::new("convert")
         .arg(&png_path)
-        .arg("-density").arg("96")
+        .arg("-density").arg("300") // Match the PNG DPI
         .arg("-units").arg("PixelsPerInch")
+        .arg("-resize").arg(format!("{}x{}!", width_points as u32, height_points as u32)) // Force exact size
         .arg("-page").arg(format!("{}x{}", width_points as u32, height_points as u32))
         .arg(&pdf_path_str)
         .output();

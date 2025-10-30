@@ -118,10 +118,21 @@
         (box as HTMLElement).style.background = 'transparent';
       });
 
-      // Capture screenshot using html2canvas
+      // Get the actual label dimensions (not rotated for display)
+      const labelWidthMm = actualWidth();
+      const labelHeightMm = actualHeight();
+
+      // Calculate target resolution: 300 DPI for high quality
+      const dpi = 300;
+      const mmToInch = 1 / 25.4;
+      const targetWidthPx = Math.round(labelWidthMm * mmToInch * dpi);
+      const targetHeightPx = Math.round(labelHeightMm * mmToInch * dpi);
+
+      // Capture the element at high resolution
+      // html2canvas will capture it as displayed (rotated if view is rotated)
       const canvas = await html2canvas(contentElement, {
         backgroundColor: '#ffffff',
-        scale: 4, // Very high quality for crisp text
+        scale: 4, // High quality capture
         logging: false,
         useCORS: true
       });
@@ -138,27 +149,47 @@
         (box as HTMLElement).style.background = '';
       });
 
-      // Get the actual label dimensions (not rotated for display)
-      const labelWidthMm = actualWidth();
-      const labelHeightMm = actualHeight();
-
-      // Create a new canvas with correct aspect ratio based on mm dimensions
-      const targetCanvas = document.createElement('canvas');
-      const mmToPixel = 11.811; // 300 DPI: 300/25.4 = 11.811 pixels per mm
-      targetCanvas.width = labelWidthMm * mmToPixel;
-      targetCanvas.height = labelHeightMm * mmToPixel;
-
-      const ctx = targetCanvas.getContext('2d');
-      if (!ctx) {
-        throw new Error('Failed to get canvas context');
+      // Create final canvas at exact dimensions for PDF
+      const finalCanvas = document.createElement('canvas');
+      const needsRotation = viewRotation === "rotated";
+      
+      if (needsRotation) {
+        // When rotated, the captured canvas has swapped dimensions
+        // We need to rotate it back and output at actual dimensions
+        finalCanvas.width = targetWidthPx;
+        finalCanvas.height = targetHeightPx;
+        
+        const ctx = finalCanvas.getContext('2d');
+        if (!ctx) {
+          throw new Error('Failed to get canvas context');
+        }
+        
+        // Rotate the image back to original orientation
+        // Translate to center, rotate 90° clockwise, then draw
+        ctx.translate(finalCanvas.width / 2, finalCanvas.height / 2);
+        ctx.rotate(Math.PI / 2); // 90 degrees clockwise
+        ctx.drawImage(
+          canvas,
+          -canvas.height / 2, // Use canvas height because dimensions are swapped
+          -canvas.width / 2,
+          canvas.height,
+          canvas.width
+        );
+      } else {
+        // No rotation needed, just resize to exact dimensions
+        finalCanvas.width = targetWidthPx;
+        finalCanvas.height = targetHeightPx;
+        
+        const ctx = finalCanvas.getContext('2d');
+        if (!ctx) {
+          throw new Error('Failed to get canvas context');
+        }
+        
+        ctx.drawImage(canvas, 0, 0, finalCanvas.width, finalCanvas.height);
       }
 
-      // Draw the captured screenshot onto the new canvas with correct dimensions
-      // This ensures the aspect ratio matches the mm dimensions
-      ctx.drawImage(canvas, 0, 0, targetCanvas.width, targetCanvas.height);
-
       // Convert canvas to base64 PNG
-      const imageData = targetCanvas.toDataURL('image/png');
+      const imageData = finalCanvas.toDataURL('image/png');
 
       // PDF dimensions are always the actual label dimensions (not view rotation)
       const pdfWidth = labelWidthMm;
