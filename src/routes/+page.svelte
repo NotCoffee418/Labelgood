@@ -63,9 +63,36 @@
   });
 
   function handlePrint() {
+    // Dynamically update the @page rule with the current label dimensions
+    updatePageRule();
+    
     // Use the browser's native print dialog
     // This works cross-platform (Linux, Windows, macOS) and provides print preview
     window.print();
+  }
+
+  // Update or create a dynamic style element for the @page rule
+  function updatePageRule() {
+    const styleId = 'dynamic-page-size';
+    let styleElement = document.getElementById(styleId) as HTMLStyleElement;
+    
+    if (!styleElement) {
+      styleElement = document.createElement('style');
+      styleElement.id = styleId;
+      document.head.appendChild(styleElement);
+    }
+    
+    // Set the page size based on current label dimensions
+    // Note: continuous dimensions use the current width/height value
+    const pageWidth = continuousWidth ? Math.max(width, 10) : width;
+    const pageHeight = continuousHeight ? Math.max(height, 10) : height;
+    
+    styleElement.textContent = `
+      @page {
+        size: ${pageWidth}mm ${pageHeight}mm;
+        margin: 0;
+      }
+    `;
   }
 
   // Resize handle handlers
