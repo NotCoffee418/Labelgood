@@ -74,15 +74,24 @@ async fn generate_pdf(options: PrintOptions) -> Result<String, String> {
     // The PNG comes from frontend at 300 DPI with pixel dimensions calculated as:
     //   targetWidthPx = labelWidthMm * (300 / 25.4)
     //   targetHeightPx = labelHeightMm * (300 / 25.4)
-    // We tell ImageMagick the density is 300 DPI and set the page size in points
+    // 
+    // Critical: We need to preserve the 300 DPI throughout the conversion
     let width_points = options.width_mm * 2.83465; // mm to points (1mm = 2.83465pt)
     let height_points = options.height_mm * 2.83465;
+    
+    println!("Creating PDF: {}x{} mm ({}x{} points)", 
+             options.width_mm, options.height_mm,
+             width_points as u32, height_points as u32);
 
+    // Convert PNG to PDF preserving dimensions:
+    // The key is to read at 300 DPI and write at 72 DPI (PDF standard)
+    // This causes ImageMagick to scale appropriately
     let result = Command::new("convert")
         .arg(&png_path)
-        .arg("-density").arg("300") // Match the PNG DPI
+        .arg("-density").arg("300") // Input PNG is at 300 DPI
         .arg("-units").arg("PixelsPerInch")
-        .arg("-page").arg(format!("{}x{}", width_points as u32, height_points as u32))
+        .arg("-density").arg("72") // Output PDF at 72 DPI (standard)
+        .arg("-page").arg(format!("{}x{}", width_points as u32, height_points as u32)) // Set PDF page size in points
         .arg(&pdf_path_str)
         .output();
 
