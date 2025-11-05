@@ -126,7 +126,11 @@ function Add-ToPath {
         $currentPath = ""
     }
     
-    if ($currentPath -notlike "*$INSTALL_DIR*") {
+    # Split PATH into components and check for exact match
+    $pathComponents = $currentPath -split ';' | Where-Object { $_ -ne '' }
+    $alreadyInPath = $pathComponents | Where-Object { $_ -eq $INSTALL_DIR }
+    
+    if (-not $alreadyInPath) {
         Write-Host ""
         Write-Host "Adding Labelgood to PATH..." -ForegroundColor Yellow
         
@@ -143,8 +147,12 @@ function Add-ToPath {
         
         [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
         
-        # Update PATH for current session
-        $env:Path = "$env:Path;$INSTALL_DIR"
+        # Update PATH for current session only if not already present
+        $sessionPathComponents = $env:Path -split ';' | Where-Object { $_ -ne '' }
+        $alreadyInSession = $sessionPathComponents | Where-Object { $_ -eq $INSTALL_DIR }
+        if (-not $alreadyInSession) {
+            $env:Path = "$env:Path;$INSTALL_DIR"
+        }
         
         Write-Host "✓ Added to PATH" -ForegroundColor Green
     }

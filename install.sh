@@ -87,7 +87,20 @@ install_labelgood() {
     
     # Extract the archive
     echo -e "${YELLOW}Extracting archive...${NC}"
-    tar -xzf "$filename"
+    if ! tar -xzf "$filename"; then
+        echo -e "${RED}Error: Failed to extract archive (possibly corrupted download)${NC}" >&2
+        cd - > /dev/null
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
+    
+    # Verify binary exists after extraction
+    if [ ! -f "labelgood" ]; then
+        echo -e "${RED}Error: Binary not found in archive${NC}" >&2
+        cd - > /dev/null
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
     
     # Create install directory if it doesn't exist
     mkdir -p "$INSTALL_DIR"
