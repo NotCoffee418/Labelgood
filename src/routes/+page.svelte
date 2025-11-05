@@ -3,8 +3,8 @@
   import html2canvas from 'html2canvas';
 
   // State for label dimensions
-  let width = $state(100);
-  let height = $state(50);
+  let width = $state(62);
+  let height = $state(30);
   let continuousWidth = $state(false);
   let continuousHeight = $state(false);
   let viewRotation = $state<"normal" | "rotated">("normal");
