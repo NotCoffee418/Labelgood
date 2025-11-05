@@ -43,9 +43,16 @@ detect_arch() {
 # Get the latest release version
 get_latest_version() {
     echo -e "${YELLOW}Fetching latest release information...${NC}"
-    local version=$(curl -sL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | sed -E 's/.*"([^"]+)".*/\1/')
     
-    if [ -z "$version" ]; then
+    # Try to use jq if available for robust JSON parsing
+    if command -v jq &> /dev/null; then
+        local version=$(curl -sL "https://api.github.com/repos/${REPO}/releases/latest" | jq -r '.tag_name')
+    else
+        # Fallback to grep/sed if jq is not available
+        local version=$(curl -sL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | head -1 | sed -E 's/.*"tag_name"[^"]*"([^"]+)".*/\1/')
+    fi
+    
+    if [ -z "$version" ] || [ "$version" = "null" ]; then
         echo -e "${RED}Error: Could not fetch latest version${NC}" >&2
         exit 1
     fi

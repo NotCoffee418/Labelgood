@@ -122,11 +122,25 @@ function New-DesktopShortcut {
 function Add-ToPath {
     $currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
     
+    if ([string]::IsNullOrEmpty($currentPath)) {
+        $currentPath = ""
+    }
+    
     if ($currentPath -notlike "*$INSTALL_DIR*") {
         Write-Host ""
         Write-Host "Adding Labelgood to PATH..." -ForegroundColor Yellow
         
-        $newPath = "$currentPath;$INSTALL_DIR"
+        # Handle semicolon separator properly
+        if ([string]::IsNullOrEmpty($currentPath)) {
+            $newPath = $INSTALL_DIR
+        }
+        elseif ($currentPath.EndsWith(";")) {
+            $newPath = "$currentPath$INSTALL_DIR"
+        }
+        else {
+            $newPath = "$currentPath;$INSTALL_DIR"
+        }
+        
         [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
         
         # Update PATH for current session
