@@ -74,28 +74,15 @@ async fn generate_pdf(options: PrintOptions) -> Result<String, String> {
     // The PNG comes from frontend at 300 DPI with pixel dimensions calculated as:
     //   targetWidthPx = labelWidthMm * (300 / 25.4)
     //   targetHeightPx = labelHeightMm * (300 / 25.4)
-    // 
-    // For a 62mm x 100mm label at 300 DPI:
-    //   - PNG is 732x1181 pixels
-    //   - PDF should be 62mm x 100mm (176x283 points)
-    //   - When printed at actual size, should be 62mm x 100mm
-    
-    // Calculate page size in points
-    let width_mm_str = format!("{}mm", options.width_mm);
-    let height_mm_str = format!("{}mm", options.height_mm);
-    let page_size_mm = format!("{}x{}", width_mm_str, height_mm_str);
+    // We tell ImageMagick the density is 300 DPI and set the page size in points
+    let width_points = options.width_mm * 2.83465; // mm to points (1mm = 2.83465pt)
+    let height_points = options.height_mm * 2.83465;
 
-    println!("Creating PDF with page size: {}", page_size_mm);
-
-    // Convert PNG to PDF with exact page size in millimeters
-    // ImageMagick will handle the scaling from 300 DPI to the target size
     let result = Command::new("convert")
         .arg(&png_path)
-        .arg("-density").arg("300") // Input PNG is at 300 DPI
+        .arg("-density").arg("300") // Match the PNG DPI
         .arg("-units").arg("PixelsPerInch")
-        .arg("-background").arg("white")
-        .arg("-alpha").arg("remove") // Remove transparency
-        .arg("-page").arg(&page_size_mm) // Set PDF page size in mm
+        .arg("-page").arg(format!("{}x{}", width_points as u32, height_points as u32))
         .arg(&pdf_path_str)
         .output();
 
@@ -110,32 +97,22 @@ async fn generate_pdf(options: PrintOptions) -> Result<String, String> {
                     return Err(format!("PDF file does not exist at: {}", pdf_path_str));
                 }
 
-                // Print using lpr with proper page size settings
-                // For CUPS, specify the media size in millimeters or points
-                let width_mm = options.width_mm;
-                let height_mm = options.height_mm;
-                
-                // Convert to points for CUPS (some printers need points)
-                let width_points = options.width_mm * 2.83465;
-                let height_points = options.height_mm * 2.83465;
-                let width_pt = width_points as u32;
-                let height_pt = height_points as u32;
-                
-                // Try media size in points format
-                let media_size = format!("media=Custom.{}x{}pt", width_pt, height_pt);
+                // Format for Brother label printer: Custom.WIDTHxHEIGHT in tenths of mm
+                // Example: 100mm x 50mm = Custom.1000x500
+                let width_tenths = (options.width_mm * 10.0) as u32;
+                let height_tenths = (options.height_mm * 10.0) as u32;
+                let page_size = format!("PageSize=Custom.{}x{}", width_tenths, height_tenths);
 
                 println!("Printing to: {}", printer_name);
                 println!("PDF path: {}", pdf_path_str);
-                println!("Label dimensions: {}mm x {}mm", width_mm, height_mm);
-                println!("Points: {}pt x {}pt", width_pt, height_pt);
-                println!("Media size option: {}", media_size);
+                println!("Page size: {}", page_size);
 
                 let print_result = Command::new("lpr")
                     .arg("-P").arg(printer_name)
-                    .arg("-o").arg(&media_size)
+                    .arg("-o").arg(&page_size)
                     .arg("-o").arg("fit-to-page=false")
                     .arg("-o").arg("scaling=100")
-                    .arg("-o").arg("number-up=1")
+                    .arg("-o").arg("print-scaling=none")
                     .arg(&pdf_path_str)
                     .output();
 
