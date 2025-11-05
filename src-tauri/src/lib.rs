@@ -97,22 +97,25 @@ async fn generate_pdf(options: PrintOptions) -> Result<String, String> {
                     return Err(format!("PDF file does not exist at: {}", pdf_path_str));
                 }
 
-                // Format for Brother label printer: Custom.WIDTHxHEIGHT in tenths of mm
-                // Example: 100mm x 50mm = Custom.1000x500
-                let width_tenths = (options.width_mm * 10.0) as u32;
-                let height_tenths = (options.height_mm * 10.0) as u32;
-                let page_size = format!("PageSize=Custom.{}x{}", width_tenths, height_tenths);
-
+                // Print with lpr using the exact page dimensions from the PDF
+                // The PDF already has the correct page size, but we need to tell
+                // CUPS/lpr to use that size and not fit it to A4 or other default sizes
+                
+                // Calculate dimensions in different units for CUPS compatibility
+                let width_mm = options.width_mm as u32;
+                let height_mm = options.height_mm as u32;
+                
                 println!("Printing to: {}", printer_name);
                 println!("PDF path: {}", pdf_path_str);
-                println!("Page size: {}", page_size);
+                println!("Label dimensions: {}mm x {}mm", width_mm, height_mm);
 
+                // Use PageSize with dimensions in mm - this is more universally supported
+                let page_size = format!("PageSize=Custom.{}x{}mm", width_mm, height_mm);
+                
                 let print_result = Command::new("lpr")
                     .arg("-P").arg(printer_name)
                     .arg("-o").arg(&page_size)
                     .arg("-o").arg("fit-to-page=false")
-                    .arg("-o").arg("scaling=100")
-                    .arg("-o").arg("print-scaling=none")
                     .arg(&pdf_path_str)
                     .output();
 
