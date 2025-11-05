@@ -1,11 +1,14 @@
 <script lang="ts">
+  import { invoke } from '@tauri-apps/api/core';
+  import html2canvas from 'html2canvas';
+
   // State for label dimensions
-  let width = $state(100);
-  let height = $state(50);
+  let width = $state(62);
+  let height = $state(30);
   let continuousWidth = $state(false);
   let continuousHeight = $state(false);
   let viewRotation = $state<"normal" | "rotated">("normal");
-  
+
   // Reference to content for measuring
   let contentElement: HTMLDivElement;
 
@@ -18,6 +21,11 @@
 
   // State for settings
   let rememberSettings = $state(false);
+
+  // State for printer selection
+  let printers = $state<string[]>([]);
+  let selectedPrinter = $state<string>("");
+  let printMode = $state<"preview" | "print">("preview"); // preview = open PDF, print = send to printer
 
   // State for text boxes
   let textBoxes = $state([
@@ -44,28 +52,259 @@
     }
   }
 
+  // Calculate actual dimensions (respecting continuous settings)
+  // These are the real dimensions used for printing
+  const actualWidth = $derived(() => {
+    return continuousWidth ? Math.max(width, 10) : width;
+  });
+
+  const actualHeight = $derived(() => {
+    return continuousHeight ? Math.max(height, 10) : height;
+  });
+
   // Calculate dimensions for the view
   // When rotated, we swap width and height for the display only
   const renderWidth = $derived(() => {
-    const baseWidth = continuousWidth ? Math.max(width, 10) : width;
-    const baseHeight = continuousHeight ? Math.max(height, 10) : height;
-    
     // Swap dimensions when view is rotated
-    return viewRotation === "rotated" ? baseHeight : baseWidth;
+    return viewRotation === "rotated" ? actualHeight() : actualWidth();
   });
 
   const renderHeight = $derived(() => {
-    const baseWidth = continuousWidth ? Math.max(width, 10) : width;
-    const baseHeight = continuousHeight ? Math.max(height, 10) : height;
-    
     // Swap dimensions when view is rotated
-    return viewRotation === "rotated" ? baseWidth : baseHeight;
+    return viewRotation === "rotated" ? actualWidth() : actualHeight();
   });
 
-  function handlePrint() {
-    // Use the browser's native print dialog
-    // This works cross-platform (Linux, Windows, macOS) and provides print preview
-    window.print();
+  // Load available printers on mount
+  async function loadPrinters() {
+    try {
+      const printerList = await invoke<string[]>('list_printers');
+      printers = printerList;
+      if (printerList.length > 0) {
+        selectedPrinter = printerList[0];
+      }
+    } catch (error) {
+      console.error('Failed to load printers:', error);
+      // Don't show an error to the user, just leave printers empty
+    }
+  }
+
+  // Load printers when component mounts
+  $effect(() => {
+    loadPrinters();
+  });
+
+  async function handlePrint() {
+    try {
+      if (!contentElement) {
+        alert('Label preview not ready');
+        return;
+      }
+
+      // Temporarily hide all interactive elements (delete buttons, resize handles)
+      const deleteButtons = contentElement.querySelectorAll('.delete-btn');
+      const resizeHandles = contentElement.querySelectorAll('.resize-handle');
+      const textBoxes = contentElement.querySelectorAll('.text-box');
+
+      // Hide interactive elements
+      deleteButtons.forEach((btn: Element) => {
+        (btn as HTMLElement).style.display = 'none';
+      });
+      resizeHandles.forEach((handle: Element) => {
+        (handle as HTMLElement).style.display = 'none';
+      });
+      // Remove borders and hover effects from text boxes
+      textBoxes.forEach((box: Element) => {
+        (box as HTMLElement).style.border = 'none';
+        (box as HTMLElement).style.background = 'transparent';
+      });
+
+      // Get the actual label dimensions (not rotated for display)
+      const labelWidthMm = actualWidth();
+      const labelHeightMm = actualHeight();
+
+      // Calculate target resolution: 300 DPI for high quality
+      const dpi = 300;
+      const mmToInch = 1 / 25.4;
+      const targetWidthPx = Math.round(labelWidthMm * mmToInch * dpi);
+      const targetHeightPx = Math.round(labelHeightMm * mmToInch * dpi);
+
+      // Capture the element at high resolution
+      // html2canvas will capture it as displayed (rotated if view is rotated)
+      const canvas = await html2canvas(contentElement, {
+        backgroundColor: '#ffffff',
+        scale: 4, // High quality capture
+        logging: false,
+        useCORS: true
+      });
+
+      // Restore interactive elements
+      deleteButtons.forEach((btn: Element) => {
+        (btn as HTMLElement).style.display = '';
+      });
+      resizeHandles.forEach((handle: Element) => {
+        (handle as HTMLElement).style.display = '';
+      });
+      textBoxes.forEach((box: Element) => {
+        (box as HTMLElement).style.border = '';
+        (box as HTMLElement).style.background = '';
+      });
+
+      // Create final canvas at exact dimensions for PDF
+      const finalCanvas = document.createElement('canvas');
+      const needsRotation = viewRotation === "rotated";
+      
+      if (needsRotation) {
+        // When rotated, the captured canvas has swapped dimensions
+        // We need to rotate it back and output at actual dimensions
+        finalCanvas.width = targetWidthPx;
+        finalCanvas.height = targetHeightPx;
+        
+        const ctx = finalCanvas.getContext('2d');
+        if (!ctx) {
+          throw new Error('Failed to get canvas context');
+        }
+        
+        // Rotate the image back to original orientation
+        // Translate to center, rotate 90° clockwise, then draw
+        ctx.translate(finalCanvas.width / 2, finalCanvas.height / 2);
+        ctx.rotate(Math.PI / 2); // 90 degrees clockwise
+        ctx.drawImage(
+          canvas,
+          -canvas.height / 2, // Use canvas height because dimensions are swapped
+          -canvas.width / 2,
+          canvas.height,
+          canvas.width
+        );
+      } else {
+        // No rotation needed, just resize to exact dimensions
+        finalCanvas.width = targetWidthPx;
+        finalCanvas.height = targetHeightPx;
+        
+        const ctx = finalCanvas.getContext('2d');
+        if (!ctx) {
+          throw new Error('Failed to get canvas context');
+        }
+        
+        ctx.drawImage(canvas, 0, 0, finalCanvas.width, finalCanvas.height);
+      }
+
+      // Convert canvas to base64 PNG
+      const imageData = finalCanvas.toDataURL('image/png');
+
+      // PDF dimensions are always the actual label dimensions (not view rotation)
+      const pdfWidth = labelWidthMm;
+      const pdfHeight = labelHeightMm;
+
+      const result = await invoke<string>('generate_pdf', {
+        options: {
+          image_data: imageData,
+          width_mm: pdfWidth,
+          height_mm: pdfHeight,
+          printer_name: printMode === "print" ? selectedPrinter : null
+        }
+      });
+
+      if (printMode === "print") {
+        alert(`Sent to printer: ${result}`);
+      }
+    } catch (error) {
+      console.error('Failed to generate PDF:', error);
+      alert(`Failed to generate PDF: ${error}`);
+    }
+  }
+
+  // Generate clean HTML for printing (without editorial elements)
+  function generatePrintHtml(): string {
+    // Get the actual dimensions of the preview container to calculate scale
+    const previewWidthMm = viewRotation === "rotated" ? actualHeight() : actualWidth();
+    const previewHeightMm = viewRotation === "rotated" ? actualWidth() : actualHeight();
+    const previewWidthPx = contentElement?.offsetWidth || (previewWidthMm * 3.7795275591); // mm to px at 96 DPI
+    const previewHeightPx = contentElement?.offsetHeight || (previewHeightMm * 3.7795275591);
+
+    // Build HTML with inline styles to ensure proper rendering
+    const styles = `
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      @page {
+        margin: 0;
+        padding: 0;
+      }
+
+      html, body {
+        margin: 0;
+        padding: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+      }
+
+      .label-container {
+        position: relative;
+        width: 100%;
+        height: 100%;
+        background: white;
+      }
+
+      .text-box {
+        position: absolute;
+        white-space: pre-wrap;
+        word-wrap: break-word;
+      }
+    `;
+
+    // Build text boxes HTML with proper coordinate transformation
+    const textBoxesHtml = textBoxes.map(box => {
+      // Transform coordinates if rotated
+      let printX, printY;
+      if (viewRotation === "rotated") {
+        // When rotated: swap and adjust coordinates
+        // Editor shows: width=height, height=width
+        // We need to transform back to original orientation for PDF
+        printX = box.y;
+        printY = previewWidthPx - box.x;
+      } else {
+        printX = box.x;
+        printY = box.y;
+      }
+
+      return `
+        <div class="text-box" style="
+          left: ${printX}px;
+          top: ${printY}px;
+          font-family: ${fontFamily};
+          font-size: ${fontSize}px;
+          color: ${fontColor};
+          font-weight: ${fontWeight};
+          font-style: ${fontStyle};
+        ">${escapeHtml(box.text)}</div>
+      `;
+    }).join('');
+
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="UTF-8">
+        <style>${styles}</style>
+      </head>
+      <body>
+        <div class="label-container">
+          ${textBoxesHtml}
+        </div>
+      </body>
+      </html>
+    `;
+  }
+
+  // Helper function to escape HTML special characters
+  function escapeHtml(text: string): string {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
   }
 
   // Resize handle handlers
@@ -362,6 +601,51 @@
     </div>
 
     <div class="settings-group">
+      <h3>Print Mode</h3>
+      <div class="radio-group">
+        <label class="radio-label">
+          <input
+            type="radio"
+            name="printMode"
+            value="preview"
+            bind:group={printMode}
+          />
+          Preview PDF
+        </label>
+        <label class="radio-label">
+          <input
+            type="radio"
+            name="printMode"
+            value="print"
+            bind:group={printMode}
+          />
+          Send to Printer
+        </label>
+      </div>
+    </div>
+
+    {#if printMode === "print"}
+      <div class="settings-group">
+        <h3>Printer</h3>
+        {#if printers.length > 0}
+          <select bind:value={selectedPrinter} class="printer-select">
+            {#each printers as printer}
+              <option value={printer}>{printer}</option>
+            {/each}
+          </select>
+          <button class="refresh-printers-btn" onclick={loadPrinters} title="Refresh printer list">
+            ↻
+          </button>
+        {:else}
+          <p class="no-printers-text">No printers found. Make sure CUPS is running.</p>
+          <button class="refresh-printers-btn" onclick={loadPrinters}>
+            Refresh Printers
+          </button>
+        {/if}
+      </div>
+    {/if}
+
+    <div class="settings-group">
       <label class="checkbox-label">
         <input type="checkbox" bind:checked={rememberSettings} />
         Remember Settings
@@ -369,7 +653,7 @@
     </div>
 
     <button class="print-button" onclick={handlePrint}>
-      Print
+      {printMode === "preview" ? "Generate PDF" : "Print"}
     </button>
   </aside>
 </div>
@@ -474,11 +758,10 @@
   }
 
   .label-preview {
-    border: 2px solid #333;
     background: white;
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
     position: relative;
     min-height: 1em;
+    box-shadow: 0 0 0 2px #333;
   }
 
   .resize-handle {
@@ -694,6 +977,39 @@
     font-size: 12px;
     color: #777;
     font-style: italic;
+    line-height: 1.4;
+  }
+
+  .printer-select {
+    width: 100%;
+    padding: 8px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 14px;
+    background-color: white;
+    color: #333;
+    margin-bottom: 10px;
+  }
+
+  .refresh-printers-btn {
+    padding: 6px 12px;
+    background-color: #6c757d;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    font-size: 14px;
+    cursor: pointer;
+    font-weight: 500;
+  }
+
+  .refresh-printers-btn:hover {
+    background-color: #5a6268;
+  }
+
+  .no-printers-text {
+    font-size: 14px;
+    color: #dc3545;
+    margin-bottom: 10px;
     line-height: 1.4;
   }
 
