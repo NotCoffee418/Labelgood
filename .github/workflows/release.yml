@@ -60,10 +60,6 @@ jobs:
         include:
           - target: x86_64-unknown-linux-gnu
             arch: amd64
-          - target: aarch64-unknown-linux-gnu
-            arch: arm64
-          - target: armv7-unknown-linux-gnueabihf
-            arch: armv7
     steps:
       - uses: actions/checkout@v5.0.0
 
@@ -85,18 +81,6 @@ jobs:
       - name: Add Rust target
         run: rustup target add ${{ matrix.target }}
 
-      - name: Install cross-compilation tools
-        if: matrix.target == 'aarch64-unknown-linux-gnu'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-aarch64-linux-gnu
-
-      - name: Install cross-compilation tools
-        if: matrix.target == 'armv7-unknown-linux-gnueabihf'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y gcc-arm-linux-gnueabihf
-
       - name: Install Tauri dependencies (Linux)
         run: |
           sudo apt-get update
@@ -112,9 +96,6 @@ jobs:
           key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Build binary
-        env:
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_GNU_LINKER: aarch64-linux-gnu-gcc
-          CARGO_TARGET_ARMV7_UNKNOWN_LINUX_GNUEABIHF_LINKER: arm-linux-gnueabihf-gcc
         run: |
           cargo build --release --manifest-path=src-tauri/Cargo.toml --target ${{ matrix.target }}
           mkdir -p dist/${{ matrix.arch }}
@@ -188,18 +169,6 @@ jobs:
           name: labelgood-linux-amd64
           path: artifacts
 
-      - name: Download Linux ARM64 artifact
-        uses: actions/download-artifact@v5.0.0
-        with:
-          name: labelgood-linux-arm64
-          path: artifacts
-
-      - name: Download Linux ARMv7 artifact
-        uses: actions/download-artifact@v5.0.0
-        with:
-          name: labelgood-linux-armv7
-          path: artifacts
-
       - name: Download Windows artifact
         uses: actions/download-artifact@v5.0.0
         with:
@@ -224,10 +193,8 @@ jobs:
 
           ### Linux
           - **AMD64 (x86_64)**: \`labelgood-${{ steps.get_version.outputs.VERSION }}-linux-amd64.tar.gz\`
-          - **ARM64**: \`labelgood-${{ steps.get_version.outputs.VERSION }}-linux-arm64.tar.gz\`  
-          - **ARMv7**: \`labelgood-${{ steps.get_version.outputs.VERSION }}-linux-armv7.tar.gz\`
 
-          Extract with: \`tar -xzf labelgood-${{ steps.get_version.outputs.VERSION }}-linux-<arch>.tar.gz\`
+          Extract with: \`tar -xzf labelgood-${{ steps.get_version.outputs.VERSION }}-linux-amd64.tar.gz\`
 
           ### Windows
           - **AMD64 (x86_64)**: \`labelgood-${{ steps.get_version.outputs.VERSION }}-windows-amd64.zip\`

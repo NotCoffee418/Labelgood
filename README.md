@@ -58,7 +58,9 @@ git push origin v1.0.0
 The workflow will:
 1. Run tests
 2. Build binaries for:
-   - Linux (amd64, arm64, armv7)
-   - Windows (amd64)
+   - Linux (x86_64/amd64)
+   - Windows (x86_64/amd64)
 3. Create a GitHub release with the built binaries
+
+**Note:** ARM builds (arm64, armv7) are not currently supported due to cross-compilation complexity with Tauri's GUI dependencies. Users on ARM platforms can build from source.
 
