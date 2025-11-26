@@ -2,6 +2,33 @@
 
 A desktop application built with Tauri + Svelte + TypeScript.
 
+⚠️ **Pre-Alpha Software** - Labelgood is currently in pre-alpha development. It theoretically works... mostly. Expect bugs and breaking changes.
+
+## Installation
+
+### Quick Install (Linux/macOS)
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/NotCoffee418/Labelgood/main/install.sh | bash
+```
+
+### Quick Install (Windows)
+
+Open PowerShell as Administrator and run:
+
+```powershell
+irm https://raw.githubusercontent.com/NotCoffee418/Labelgood/main/install.ps1 | iex
+```
+
+### Manual Installation
+
+Download the latest release for your platform from the [releases page](https://github.com/NotCoffee418/Labelgood/releases/latest):
+
+- **Linux**: `labelgood-VERSION-linux-ARCH.tar.gz` (amd64, arm64, or armv7)
+- **Windows**: `labelgood-VERSION-windows-amd64.zip`
+
+Extract the archive and run the binary.
+
 ## Development Setup
 
 ### Prerequisites
