@@ -59,6 +59,9 @@
 
   type Margins = { top: number; right: number; bottom: number; left: number };
 
+  // A printer driver option, as reported by `lpoptions -l`
+  type PrinterOption = { key: string; label: string; choices: string[]; default: string | null };
+
   const SETTINGS_KEY = 'labelgood-settings';
   const PX_PER_MM = 96 / 25.4;
   const PRINT_DPI = 300;
@@ -105,6 +108,24 @@
   // Lines snap to horizontal/vertical within this angle unless Shift is held
   const LINE_SNAP_TOLERANCE = Math.tan(5 * Math.PI / 180);
   const HISTORY_LIMIT = 200;
+
+  // Print dialog: friendlier names for common CUPS driver options and choices
+  const PRINT_OPTION_LABELS: Record<string, string> = {
+    CutMedia: 'Cut',
+    cupsPrintQuality: 'Quality',
+    MediaType: 'Media',
+    ColorModel: 'Colour',
+    OutputBin: 'Output tray',
+    InputSlot: 'Paper source',
+    Duplex: 'Two-sided',
+  };
+  const PRINT_CHOICE_LABELS: Record<string, Record<string, string>> = {
+    CutMedia: { None: "Don't cut", Auto: 'Printer default', EndOfPage: 'After each label', EndOfJob: 'After the last label' },
+    MediaType: { Labels: 'Die-cut labels', Roll: 'Continuous roll' },
+    ColorModel: { Gray: 'Black & white', RGB: 'Colour' },
+  };
+  // Set from the label itself
+  const HIDDEN_PRINT_OPTIONS = ['PageSize'];
   const MIN_ZOOM = 0.1;
   const MAX_ZOOM = 6;
   const DEFAULT_ZOOM = 1.5;
@@ -163,7 +184,14 @@
   // State for output
   let printers = $state<string[]>([]);
   let selectedPrinter = $state<string>("");
-  let printMode = $state<"pdf" | "print">("pdf"); // pdf = save to file, print = send to printer
+  let copies = $state(1);
+  // Print option choices per printer, remembered between runs
+  let printChoices = $state<Record<string, Record<string, string>>>({});
+  let printDialog = $state<{ preview: string } | null>(null);
+  let printerOptions = $state<PrinterOption[] | null>(null); // null while loading
+  let printerOptionsError = $state<string | null>(null);
+  let printing = $state(false);
+  let printError = $state<string | null>(null);
   let lastSaveDir = $state<string | null>(null);
   let busy = $state(false);
   let status = $state<{ text: string; error: boolean } | null>(null);
@@ -468,8 +496,9 @@
       theme = s.theme ?? theme;
       defaultStyle = { ...defaultStyle, ...s.defaultStyle };
       defaultShape = { ...defaultShape, ...s.defaultShape };
-      printMode = s.printMode === "print" ? "print" : "pdf";
       selectedPrinter = s.selectedPrinter ?? selectedPrinter;
+      copies = s.copies >= 1 ? s.copies : copies;
+      printChoices = s.printChoices ?? printChoices;
       lastSaveDir = s.lastSaveDir ?? lastSaveDir;
       if (s.zoom >= MIN_ZOOM && s.zoom <= MAX_ZOOM) zoom = s.zoom;
     } catch (error) {
@@ -493,7 +522,7 @@
     const settings = {
       labelFormat, width, height, continuousWidth, continuousHeight, orientation,
       marginMode, customMargins, theme, defaultStyle, defaultShape,
-      printMode, selectedPrinter, lastSaveDir, zoom
+      selectedPrinter, copies, printChoices, lastSaveDir, zoom
     };
     try {
       localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
@@ -1048,6 +1077,7 @@
 
   // Ctrl+V outside text fields: our own elements, an image, or text as a new text box
   function handleDocumentPaste(event: ClipboardEvent) {
+    if (printDialog) return;
     const target = event.target as HTMLElement;
     if (target.closest?.('input, textarea, [contenteditable="true"]')) return;
     event.preventDefault();
@@ -1499,6 +1529,16 @@
 
   function handleKeyDown(event: KeyboardEvent) {
     const target = event.target as HTMLElement;
+    // The print dialog is modal
+    if (printDialog) {
+      if (event.key === 'Escape') closePrintDialog();
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'p') {
+      event.preventDefault();
+      openPrintDialog();
+      return;
+    }
     if (event.key === 'Shift' && (resize || endpointDrag)) {
       refreshGestureForShift(true);
       return;
@@ -1617,49 +1657,146 @@
     return finalCanvas.toDataURL('image/png');
   }
 
-  async function handleOutput() {
+  function validateLabelSize(): boolean {
+    if (actualWidth > 0 && actualHeight > 0) return true;
+    status = { text: 'Enter a valid label width and height.', error: true };
+    return false;
+  }
+
+  async function savePdf() {
     if (busy || !contentElement) return;
     status = null;
     stopEditing();
-
-    if (!(actualWidth > 0) || !(actualHeight > 0)) {
-      status = { text: 'Enter a valid label width and height.', error: true };
-      return;
-    }
-    if (printMode === "print" && !selectedPrinter) {
-      status = { text: 'Select a printer first.', error: true };
-      return;
-    }
+    if (!validateLabelSize()) return;
 
     busy = true;
     try {
-      let outputPath: string | null = null;
-      if (printMode === "pdf") {
-        const fileName = `label-${actualWidth}x${actualHeight}mm.pdf`;
-        outputPath = await save({
-          defaultPath: lastSaveDir ? await join(lastSaveDir, fileName) : fileName,
-          filters: [{ name: 'PDF', extensions: ['pdf'] }],
-        });
-        if (!outputPath) return; // cancelled
-        if (!outputPath.toLowerCase().endsWith('.pdf')) outputPath += '.pdf';
-        lastSaveDir = await dirname(outputPath);
-      }
+      const fileName = `label-${actualWidth}x${actualHeight}mm.pdf`;
+      let outputPath = await save({
+        defaultPath: lastSaveDir ? await join(lastSaveDir, fileName) : fileName,
+        filters: [{ name: 'PDF', extensions: ['pdf'] }],
+      });
+      if (!outputPath) return; // cancelled
+      if (!outputPath.toLowerCase().endsWith('.pdf')) outputPath += '.pdf';
+      lastSaveDir = await dirname(outputPath);
 
       const result = await invoke<string>('generate_pdf', {
         options: {
           image_data: await renderLabelPng(),
           width_mm: actualWidth,
           height_mm: actualHeight,
-          printer_name: printMode === "print" ? selectedPrinter : null,
+          printer_name: null,
           output_path: outputPath,
         }
       });
       status = { text: result, error: false };
     } catch (error) {
-      console.error('Output failed:', error);
+      console.error('Saving PDF failed:', error);
       status = { text: String(error), error: true };
     } finally {
       busy = false;
+    }
+  }
+
+  // ---- Print dialog ----
+
+  const visiblePrintOptions = $derived(
+    (printerOptions ?? []).filter(o => !HIDDEN_PRINT_OPTIONS.includes(o.key) && o.choices.length > 1)
+  );
+  const isContinuousLabel = $derived(continuousWidth || continuousHeight);
+
+  // Media type is remembered separately for continuous and die-cut labels
+  function choiceKey(option: PrinterOption): string {
+    return option.key === 'MediaType' ? `MediaType@${isContinuousLabel ? 'continuous' : 'die-cut'}` : option.key;
+  }
+
+  // Sensible defaults: cut after each label, media type matching the label
+  function suggestedChoice(option: PrinterOption): string | undefined {
+    const pick = (value: string) => option.choices.includes(value) ? value : undefined;
+    if (option.key === 'CutMedia') return pick('EndOfPage');
+    if (option.key === 'MediaType') return pick(isContinuousLabel ? 'Roll' : 'Labels');
+    return undefined;
+  }
+
+  function choiceFor(option: PrinterOption): string {
+    const saved = printChoices[selectedPrinter]?.[choiceKey(option)];
+    if (saved && option.choices.includes(saved)) return saved;
+    return suggestedChoice(option) ?? option.default ?? option.choices[0];
+  }
+
+  function setChoice(option: PrinterOption, value: string) {
+    printChoices = {
+      ...printChoices,
+      [selectedPrinter]: { ...printChoices[selectedPrinter], [choiceKey(option)]: value },
+    };
+  }
+
+  async function loadPrinterOptions(printer: string) {
+    printerOptions = null;
+    printerOptionsError = null;
+    if (!printer) {
+      printerOptions = [];
+      return;
+    }
+    try {
+      const options = await invoke<PrinterOption[]>('printer_options', { printer });
+      if (printer === selectedPrinter) printerOptions = options;
+    } catch (error) {
+      if (printer === selectedPrinter) {
+        printerOptions = [];
+        printerOptionsError = String(error);
+      }
+    }
+  }
+
+  // Renders the label once; the preview is exactly the image that gets printed
+  async function openPrintDialog() {
+    if (busy || !contentElement) return;
+    status = null;
+    printError = null;
+    stopEditing();
+    if (!validateLabelSize()) return;
+
+    busy = true;
+    try {
+      await loadPrinters();
+      printDialog = { preview: await renderLabelPng() };
+      loadPrinterOptions(selectedPrinter);
+    } catch (error) {
+      console.error('Preparing print failed:', error);
+      status = { text: String(error), error: true };
+    } finally {
+      busy = false;
+    }
+  }
+
+  function closePrintDialog() {
+    if (!printing) printDialog = null;
+  }
+
+  async function printFromDialog() {
+    if (!printDialog || !selectedPrinter || printing) return;
+    printError = null;
+    printing = true;
+    try {
+      const result = await invoke<string>('generate_pdf', {
+        options: {
+          image_data: printDialog.preview,
+          width_mm: actualWidth,
+          height_mm: actualHeight,
+          printer_name: selectedPrinter,
+          output_path: null,
+          copies: Math.min(999, Math.max(1, Math.round(copies) || 1)),
+          print_options: Object.fromEntries(visiblePrintOptions.map(o => [o.key, choiceFor(o)])),
+        }
+      });
+      status = { text: result, error: false };
+      printDialog = null;
+    } catch (error) {
+      console.error('Printing failed:', error);
+      printError = String(error);
+    } finally {
+      printing = false;
     }
   }
 </script>
@@ -2185,57 +2322,98 @@
       </div>
     </div>
 
-    <div class="settings-group">
-      <h3>Output</h3>
-      <div class="segmented" role="radiogroup" aria-label="Output">
-        <label class:active={printMode === "pdf"}>
-          <input type="radio" name="printMode" value="pdf" bind:group={printMode} />
-          Save as PDF
-        </label>
-        <label class:active={printMode === "print"}>
-          <input type="radio" name="printMode" value="print" bind:group={printMode} />
-          Send to Printer
-        </label>
-      </div>
-    </div>
-
-    {#if printMode === "print"}
-      <div class="settings-group">
-        <h3>Printer</h3>
-        {#if printers.length > 0}
-          <div class="printer-row">
-            <select bind:value={selectedPrinter} class="printer-select" aria-label="Printer">
-              {#each printers as printer}
-                <option value={printer}>{printer}</option>
-              {/each}
-            </select>
-            <button class="refresh-printers-btn" onclick={loadPrinters} title="Refresh printer list">
-              ↻
-            </button>
-          </div>
-        {:else}
-          <p class="no-printers-text">No printers found. Make sure CUPS is running.</p>
-          <button class="refresh-printers-btn" onclick={loadPrinters}>
-            Refresh Printers
-          </button>
-        {/if}
-      </div>
-    {/if}
-
     <div class="output-footer">
       {#if status}
         <p class="status" class:error={status.error}>{status.text}</p>
       {/if}
-      <button class="print-button" onclick={handleOutput} disabled={busy}>
-        {#if busy}
-          Working…
-        {:else}
-          {printMode === "pdf" ? "Save PDF…" : "Print"}
-        {/if}
-      </button>
+      <div class="output-buttons">
+        <button class="secondary-button" onclick={savePdf} disabled={busy}>Save PDF…</button>
+        <button class="print-button" onclick={openPrintDialog} disabled={busy} title="Print (Ctrl+P)">
+          {busy ? 'Working…' : 'Print…'}
+        </button>
+      </div>
     </div>
   </aside>
 </div>
+
+{#if printDialog}
+  <div class="modal-backdrop" role="presentation" onmousedown={(e) => { if (e.target === e.currentTarget) closePrintDialog(); }}>
+    <div class="print-dialog" role="dialog" aria-modal="true" aria-labelledby="print-title">
+      <h2 id="print-title">Print</h2>
+      <div class="print-body">
+        <figure class="print-preview">
+          <img src={printDialog.preview} alt="Print preview" />
+          <figcaption>{actualWidth} × {actualHeight} mm · shown as it comes out of the printer</figcaption>
+        </figure>
+
+        <div class="print-settings">
+          <div class="field">
+            <span>Printer</span>
+            {#if printers.length > 0}
+              <div class="printer-row">
+                <select
+                  class="printer-select"
+                  aria-label="Printer"
+                  bind:value={selectedPrinter}
+                  onchange={() => loadPrinterOptions(selectedPrinter)}
+                >
+                  {#each printers as printer}
+                    <option value={printer}>{printer}</option>
+                  {/each}
+                </select>
+                <button class="refresh-printers-btn" title="Refresh printer list"
+                  onclick={async () => { await loadPrinters(); loadPrinterOptions(selectedPrinter); }}>↻</button>
+              </div>
+            {:else}
+              <p class="no-printers-text">No printers found. Make sure CUPS is running.</p>
+              <button class="refresh-printers-btn" onclick={async () => { await loadPrinters(); loadPrinterOptions(selectedPrinter); }}>
+                Refresh Printers
+              </button>
+            {/if}
+          </div>
+
+          <label class="field">
+            <span>Copies</span>
+            <input
+              type="number"
+              min="1"
+              max="999"
+              bind:value={copies}
+              onchange={() => copies = Math.min(999, Math.max(1, Math.round(copies) || 1))}
+            />
+          </label>
+
+          {#if printerOptions === null}
+            <p class="field-note">Loading printer options…</p>
+          {:else if printerOptionsError}
+            <p class="field-note">This printer doesn't report its options, so it will use its own defaults.</p>
+          {:else}
+            {#each visiblePrintOptions as option (option.key)}
+              <label class="field">
+                <span>{PRINT_OPTION_LABELS[option.key] ?? option.label}</span>
+                <select value={choiceFor(option)} onchange={(e) => setChoice(option, e.currentTarget.value)}>
+                  {#each option.choices as choice}
+                    <option value={choice}>{PRINT_CHOICE_LABELS[option.key]?.[choice] ?? choice}</option>
+                  {/each}
+                </select>
+              </label>
+            {/each}
+          {/if}
+        </div>
+      </div>
+
+      {#if printError}
+        <p class="status error">{printError}</p>
+      {/if}
+      <div class="dialog-actions">
+        <button class="secondary-button" onclick={closePrintDialog} disabled={printing}>Cancel</button>
+        <button class="print-button" onclick={printFromDialog} disabled={printing || !selectedPrinter}>
+          {printing ? 'Printing…' : 'Print'}
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   /* Theme tokens: light by default, dark via system preference or explicit choice */
@@ -3111,8 +3289,137 @@
     white-space: pre-line;
   }
 
-  .print-button {
+  .output-buttons {
+    display: flex;
+    gap: 10px;
+  }
+
+  .output-buttons > button {
+    flex: 1;
+  }
+
+  .secondary-button {
+    padding: 12px 20px;
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  .secondary-button:hover:not(:disabled) {
+    background: var(--surface-muted);
+  }
+
+  .secondary-button:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+
+  .modal-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+    background: rgba(0, 0, 0, 0.45);
+  }
+
+  .print-dialog {
+    width: min(780px, 100%);
+    max-height: 100%;
+    overflow: auto;
+    padding: 20px 24px;
+    background: var(--surface);
+    border-radius: 10px;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35);
+  }
+
+  .print-dialog h2 {
+    margin: 0 0 16px 0;
+    font-size: 20px;
+  }
+
+  .print-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 280px;
+    gap: 20px;
+  }
+
+  @media (max-width: 680px) {
+    .print-body {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  .print-preview {
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    min-height: 260px;
+    padding: 24px;
+    background: var(--canvas-bg);
+    border-radius: 8px;
+  }
+
+  .print-preview img {
+    max-width: 100%;
+    max-height: 340px;
+    background: white;
+    box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.18);
+  }
+
+  .print-preview figcaption {
+    font-size: 12px;
+    color: var(--text-subtle);
+    text-align: center;
+  }
+
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-bottom: 12px;
+  }
+
+  .field > span {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--text-muted);
+  }
+
+  .field select,
+  .field input {
     width: 100%;
+    padding: 7px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 14px;
+    background-color: var(--surface);
+    color: var(--text);
+  }
+
+  .field-note {
+    margin: 0 0 12px 0;
+    font-size: 13px;
+    color: var(--text-subtle);
+  }
+
+  .dialog-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 16px;
+  }
+
+  .print-button {
     padding: 12px 24px;
     background-color: var(--accent);
     color: white;

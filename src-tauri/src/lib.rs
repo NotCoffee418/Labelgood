@@ -1,6 +1,6 @@
 use base64::Engine;
-use serde::Deserialize;
-use std::collections::BTreeSet;
+use serde::{Deserialize, Serialize};
+use std::collections::{BTreeSet, HashMap};
 use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Output};
@@ -13,6 +13,17 @@ struct PrintOptions {
     height_mm: f64,
     printer_name: Option<String>, // If provided, send to this printer
     output_path: Option<String>,  // Otherwise, save the PDF here
+    copies: Option<u32>,
+    print_options: Option<HashMap<String, String>>, // CUPS options, e.g. CutMedia=EndOfPage
+}
+
+/// A printer driver option as reported by `lpoptions -l`
+#[derive(Debug, Serialize, PartialEq)]
+struct PrinterOption {
+    key: String,
+    label: String,
+    choices: Vec<String>,
+    default: Option<String>,
 }
 
 #[tauri::command]
@@ -35,6 +46,55 @@ fn list_printers() -> Result<Vec<String>, String> {
         .collect();
 
     Ok(printers)
+}
+
+/// Parses `lpoptions -l` output: one option per line, e.g.
+/// `CutMedia/CutMedia: *None Auto EndOfPage EndOfJob` (the default is starred)
+fn parse_lpoptions(text: &str) -> Vec<PrinterOption> {
+    text.lines()
+        .filter_map(|line| {
+            let (name, choices) = line.split_once(':')?;
+            let (key, label) = name.split_once('/').unwrap_or((name, name));
+            let mut default = None;
+            let choices: Vec<String> = choices
+                .split_whitespace()
+                .map(|choice| match choice.strip_prefix('*') {
+                    Some(value) => {
+                        default = Some(value.to_string());
+                        value.to_string()
+                    }
+                    None => choice.to_string(),
+                })
+                .collect();
+            Some(PrinterOption {
+                key: key.trim().to_string(),
+                label: label.trim().to_string(),
+                choices,
+                default,
+            })
+        })
+        .collect()
+}
+
+/// Lists a printer's driver options (cutting, quality, media type, ...)
+#[tauri::command]
+fn printer_options(printer: String) -> Result<Vec<PrinterOption>, String> {
+    let output = Command::new("lpoptions")
+        .arg("-p").arg(&printer)
+        .arg("-l")
+        .output()
+        .map_err(|e| format!("Failed to execute lpoptions: {}", e))?;
+
+    if !output.status.success() {
+        return Err(String::from_utf8_lossy(&output.stderr).trim().to_string());
+    }
+    Ok(parse_lpoptions(&String::from_utf8_lossy(&output.stdout)))
+}
+
+/// CUPS option keys and values are plain words; reject anything else rather than
+/// passing it through to lpr
+fn is_safe_option_word(word: &str) -> bool {
+    !word.is_empty() && word.chars().all(|c| c.is_ascii_alphanumeric() || "._-".contains(c))
 }
 
 /// Lists installed font families via fontconfig. Fails where fontconfig isn't
@@ -114,17 +174,38 @@ fn write_pdf(png_path: &Path, pdf_path: &Path, width_mm: f64, height_mm: f64) ->
 }
 
 /// Sends a PDF to a CUPS printer at the exact label size (not fitted to A4 etc.)
-fn print_pdf(pdf_path: &Path, printer_name: &str, width_mm: f64, height_mm: f64) -> Result<(), String> {
+fn print_pdf(
+    pdf_path: &Path,
+    printer_name: &str,
+    width_mm: f64,
+    height_mm: f64,
+    copies: u32,
+    options: &HashMap<String, String>,
+) -> Result<(), String> {
     let page_size = format!(
         "PageSize=Custom.{}x{}mm",
         format_mm(width_mm),
         format_mm(height_mm)
     );
 
-    let output = Command::new("lpr")
+    let mut command = Command::new("lpr");
+    command
         .arg("-P").arg(printer_name)
+        .arg("-#").arg(copies.clamp(1, 999).to_string())
         .arg("-o").arg(&page_size)
-        .arg("-o").arg("fit-to-page=false")
+        .arg("-o").arg("fit-to-page=false");
+    for (key, value) in options {
+        // The page size always comes from the label
+        if key == "PageSize" {
+            continue;
+        }
+        if !is_safe_option_word(key) || !is_safe_option_word(value) {
+            return Err(format!("Invalid printer option: {}={}", key, value));
+        }
+        command.arg("-o").arg(format!("{}={}", key, value));
+    }
+
+    let output = command
         .arg(pdf_path)
         .output()
         .map_err(|e| format!("Failed to execute lpr command: {}", e))?;
@@ -169,8 +250,20 @@ async fn generate_pdf(options: PrintOptions) -> Result<String, String> {
             .tempfile()
             .map_err(|e| format!("Failed to create temp PDF file: {}", e))?;
         write_pdf(temp_png.path(), temp_pdf.path(), options.width_mm, options.height_mm)?;
-        print_pdf(temp_pdf.path(), printer_name, options.width_mm, options.height_mm)?;
-        Ok(format!("Printed to {}", printer_name))
+        let copies = options.copies.unwrap_or(1);
+        print_pdf(
+            temp_pdf.path(),
+            printer_name,
+            options.width_mm,
+            options.height_mm,
+            copies,
+            &options.print_options.clone().unwrap_or_default(),
+        )?;
+        Ok(if copies > 1 {
+            format!("Printed {} copies to {}", copies, printer_name)
+        } else {
+            format!("Printed to {}", printer_name)
+        })
     } else if let Some(output_path) = &options.output_path {
         write_pdf(temp_png.path(), Path::new(output_path), options.width_mm, options.height_mm)?;
         Ok(format!("Saved to {}", output_path))
@@ -191,7 +284,41 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![generate_pdf, list_printers, list_fonts])
+        .invoke_handler(tauri::generate_handler![generate_pdf, list_printers, printer_options, list_fonts])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_lpoptions_output() {
+        let text = "PageSize/Media Size: 17x54mm *29x90mm 62x100mm Custom.WIDTHxHEIGHT\n\
+                    MediaType/Media Type: *Labels Roll\n\
+                    CutMedia/CutMedia: *None Auto EndOfPage EndOfJob\n";
+        let options = parse_lpoptions(text);
+        assert_eq!(options.len(), 3);
+        assert_eq!(options[0].label, "Media Size");
+        assert_eq!(options[0].default.as_deref(), Some("29x90mm"));
+        assert_eq!(
+            options[2],
+            PrinterOption {
+                key: "CutMedia".into(),
+                label: "CutMedia".into(),
+                choices: vec!["None".into(), "Auto".into(), "EndOfPage".into(), "EndOfJob".into()],
+                default: Some("None".into()),
+            }
+        );
+    }
+
+    #[test]
+    fn rejects_unsafe_option_words() {
+        assert!(is_safe_option_word("EndOfPage"));
+        assert!(is_safe_option_word("cupsPrintQuality"));
+        assert!(!is_safe_option_word("a b"));
+        assert!(!is_safe_option_word("x;rm"));
+        assert!(!is_safe_option_word(""));
+    }
 }
