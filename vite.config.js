@@ -4,9 +4,29 @@ import { sveltekit } from "@sveltejs/kit/vite";
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
+// The Tauri webview (WebKitGTK) keeps a disk cache between runs and can reuse stale
+// dev modules after a restart, which breaks loading Svelte component CSS. Never let
+// it cache anything from the dev server.
+/** @type {import('vite').Plugin} */
+const noStoreInDev = {
+  name: "labelgood:no-store-in-dev",
+  apply: "serve",
+  configureServer(server) {
+    server.middlewares.use((_req, res, next) => {
+      const setHeader = res.setHeader.bind(res);
+      res.setHeader = /** @type {typeof res.setHeader} */ (
+        (/** @type {string} */ name, /** @type {number | string | readonly string[]} */ value) =>
+          setHeader(name, name.toLowerCase() === "cache-control" ? "no-store" : value)
+      );
+      res.setHeader("Cache-Control", "no-store");
+      next();
+    });
+  },
+};
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
-  plugins: [sveltekit()],
+  plugins: [noStoreInDev, sveltekit()],
 
   // Vite options tailored for Tauri development and only applied in `tauri dev` or `tauri build`
   //
