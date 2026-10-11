@@ -59,8 +59,8 @@
 
   type Margins = { top: number; right: number; bottom: number; left: number };
 
-  // A printer driver option, as reported by `lpoptions -l`
-  type PrinterOption = { key: string; label: string; choices: string[]; default: string | null };
+  // A printer driver option, as reported by the print system (CUPS on Linux, Print Schema on Windows)
+  type PrinterOption = { key: string; label: string; choices: string[]; choice_labels: string[]; default: string | null };
 
   const SETTINGS_KEY = 'labelgood-settings';
   const PX_PER_MM = 96 / 25.4;
@@ -137,11 +137,11 @@
   ] as const;
 
   const GENERIC_FONTS = [
-    { value: 'sans-serif', label: 'Sans Serif (system default)' },
-    { value: 'serif', label: 'Serif (system default)' },
-    { value: 'monospace', label: 'Monospace (system default)' },
+    { value: 'sans-serif', label: 'Sans Serif' },
+    { value: 'serif', label: 'Serif' },
+    { value: 'monospace', label: 'Monospace' },
   ];
-  // Used when the system font list can't be read (no fontconfig, e.g. Windows)
+  // Used if the system font list can't be read
   const FALLBACK_FONTS = [
     'Arial', 'Calibri', 'Cambria', 'Consolas', 'Courier New', 'Georgia',
     'Segoe UI', 'Tahoma', 'Times New Roman', 'Trebuchet MS', 'Verdana',
@@ -180,6 +180,8 @@
 
   let theme = $state<"system" | "light" | "dark">("system");
   let systemFonts = $state<string[]>([]);
+  // What the generic families resolve to on this system, e.g. sans-serif -> "Noto Sans"
+  let defaultFonts = $state<Record<string, string | null>>({});
 
   // State for output
   let printers = $state<string[]>([]);
@@ -564,6 +566,17 @@
     } catch (error) {
       console.error('Failed to load fonts:', error);
     }
+    try {
+      const fonts = await invoke<{ sans_serif: string | null; serif: string | null; monospace: string | null }>('default_fonts');
+      defaultFonts = { 'sans-serif': fonts?.sans_serif ?? null, serif: fonts?.serif ?? null, monospace: fonts?.monospace ?? null };
+    } catch (error) {
+      console.error('Failed to resolve default fonts:', error);
+    }
+  }
+
+  // The system's default fonts are listed by what they resolve to
+  function genericFontLabel(font: { value: string; label: string }): string {
+    return defaultFonts[font.value] ?? font.label;
   }
 
   $effect(() => {
@@ -1907,7 +1920,7 @@
             onchange={(e) => applyFormat('fontFamily', e.currentTarget.value)}
           >
             {#each GENERIC_FONTS as font}
-              <option value={font.value}>{font.label}</option>
+              <option value={font.value}>{genericFontLabel(font)}</option>
             {/each}
             <option disabled>──────────</option>
             {#each fontOptions as font}
@@ -2365,7 +2378,7 @@
                   onclick={async () => { await loadPrinters(); loadPrinterOptions(selectedPrinter); }}>↻</button>
               </div>
             {:else}
-              <p class="no-printers-text">No printers found. Make sure CUPS is running.</p>
+              <p class="no-printers-text">No printers found. Check that the printer is installed (on Linux, that CUPS is running).</p>
               <button class="refresh-printers-btn" onclick={async () => { await loadPrinters(); loadPrinterOptions(selectedPrinter); }}>
                 Refresh Printers
               </button>
@@ -2392,8 +2405,8 @@
               <label class="field">
                 <span>{PRINT_OPTION_LABELS[option.key] ?? option.label}</span>
                 <select value={choiceFor(option)} onchange={(e) => setChoice(option, e.currentTarget.value)}>
-                  {#each option.choices as choice}
-                    <option value={choice}>{PRINT_CHOICE_LABELS[option.key]?.[choice] ?? choice}</option>
+                  {#each option.choices as choice, i}
+                    <option value={choice}>{PRINT_CHOICE_LABELS[option.key]?.[choice] ?? option.choice_labels[i] ?? choice}</option>
                   {/each}
                 </select>
               </label>
@@ -2659,8 +2672,8 @@
 
   .format-row {
     box-sizing: content-box;
-    margin-top: 8px;
-    padding-top: 8px;
+    margin-top: 10px;
+    padding-top: 12px;
     border-top: 1px solid var(--border);
   }
 

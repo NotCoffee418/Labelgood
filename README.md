@@ -29,6 +29,15 @@ Download the latest release for your platform from the [releases page](https://g
 
 Extract the archive and run the binary.
 
+## Printing
+
+Labelgood prints through the system's own printer drivers, so no extra tools are needed:
+
+- **Linux**: CUPS (`lpstat`, `lpoptions`, `lpr`). Use the permanent queue for your printer (e.g. `QL-810W`); temporary auto-discovered queues don't report their options.
+- **Windows**: any installed printer. Options such as cutting come from the driver's own settings.
+
+The print dialog shows whatever options the selected printer's driver offers (cutting, quality, media type, …) and remembers your choices per printer.
+
 ## Development Setup
 
 ### Prerequisites
