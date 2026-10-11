@@ -33,7 +33,7 @@ Extract the archive and run the binary.
 
 ### Prerequisites
 
-- [Node.js](https://nodejs.org/) (v20 or later)
+- [Node.js](https://nodejs.org/) (v24 LTS or later)
 - [Rust](https://www.rust-lang.org/) (latest stable)
 - System dependencies for Tauri (see [Tauri Prerequisites](https://tauri.app/start/prerequisites/))
 
