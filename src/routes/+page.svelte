@@ -216,7 +216,20 @@
 
   // Pointer interactions
   let dragging = $state(false);
-  let drag: { startX: number; startY: number; origs: LabelElement[] } | null = null;
+  type Bounds = { x: number; y: number; w: number; h: number };
+  type Area = { minX: number; minY: number; maxX: number; maxY: number };
+  // Sizes and limits are measured once when a drag starts, so moving needs no page measuring
+  let drag: {
+    startX: number;
+    startY: number;
+    origs: LabelElement[];
+    bounds: Bounds[];
+    areas: Area[];
+    // every element, for the continuous label length while dragging
+    all: { b: Bounds; inset: number; moving: boolean }[];
+  } | null = null;
+  // Visual offset of the dragged elements; their positions are updated on release
+  let dragOffset = $state({ x: 0, y: 0 });
   // A click (no drag) on an already selected element selects the one beneath it
   let clickThrough: { id: number; x: number; y: number } | null = null;
   let marquee = $state<{ x0: number; y0: number; x1: number; y1: number; additive: boolean } | null>(null);
@@ -414,14 +427,18 @@
 
   // Length (mm) a continuous label needs so every element stays inside the end margin
   function measureContentLength(): number {
-    if (!resizeEdge || elements.length === 0) return 0;
+    // A text box's padding doesn't need to fit, only its text
+    return lengthForBounds(elements.map(el => ({ b: elementBounds(el), inset: el.kind === 'text' ? BOX_INSET : 0, moving: false })), { x: 0, y: 0 });
+  }
+
+  // Continuous length needed for elements at `items` (moving ones shifted by `offset`)
+  function lengthForBounds(items: { b: Bounds; inset: number; moving: boolean }[], offset: { x: number; y: number }): number {
+    if (!resizeEdge || items.length === 0) return 0;
     const alongWidth = resizeEdge === "right";
     let farEdge = 0;
-    for (const el of elements) {
-      const b = elementBounds(el);
-      // A text box's padding doesn't need to fit, only its text
-      const inset = el.kind === 'text' ? BOX_INSET : 0;
-      farEdge = Math.max(farEdge, (alongWidth ? b.x + b.w : b.y + b.h) - inset);
+    for (const { b, inset, moving } of items) {
+      const end = alongWidth ? b.x + b.w + (moving ? offset.x : 0) : b.y + b.h + (moving ? offset.y : 0);
+      farEdge = Math.max(farEdge, end - inset);
     }
     const endMargin = alongWidth ? displayMargins.right : displayMargins.bottom;
     return Math.ceil(farEdge / PX_PER_MM + endMargin);
@@ -471,20 +488,31 @@
   // Moves elements together from their original positions, limiting the move so
   // the whole group stays inside the margins
   function moveGroup(origs: LabelElement[], dx: number, dy: number) {
-    let loX = -Infinity, hiX = Infinity, loY = -Infinity, hiY = Infinity;
-    for (const orig of origs) {
-      const area = printableArea(orig.kind === 'text' ? BOX_INSET : 0, true);
-      const b = elementBounds(orig);
-      loX = Math.max(loX, area.minX - b.x); hiX = Math.min(hiX, area.maxX - b.x - b.w);
-      loY = Math.max(loY, area.minY - b.y); hiY = Math.min(hiY, area.maxY - b.y - b.h);
-    }
-    // If the group doesn't fit, pin it to the top-left of the printable area
-    const cx = Math.round(loX > hiX ? loX : Math.max(loX, Math.min(dx, hiX)));
-    const cy = Math.round(loY > hiY ? loY : Math.max(loY, Math.min(dy, hiY)));
+    const { x, y } = groupDelta(origs.map(elementBounds), origs.map(dragArea), dx, dy);
     for (const orig of origs) {
       const el = elements.find(e => e.id === orig.id);
-      if (el) moveElement(el, orig, cx, cy);
+      if (el) moveElement(el, orig, x, y);
     }
+  }
+
+  // Where an element may go: its printable area, open at the far end of a continuous label
+  function dragArea(el: LabelElement): Area {
+    return printableArea(el.kind === 'text' ? BOX_INSET : 0, true);
+  }
+
+  // The move (dx, dy) limited so every element stays inside its area
+  function groupDelta(bounds: Bounds[], areas: Area[], dx: number, dy: number) {
+    let loX = -Infinity, hiX = Infinity, loY = -Infinity, hiY = Infinity;
+    bounds.forEach((b, i) => {
+      const area = areas[i];
+      loX = Math.max(loX, area.minX - b.x); hiX = Math.min(hiX, area.maxX - b.x - b.w);
+      loY = Math.max(loY, area.minY - b.y); hiY = Math.min(hiY, area.maxY - b.y - b.h);
+    });
+    // If the group doesn't fit, pin it to the top-left of the printable area
+    return {
+      x: Math.round(loX > hiX ? loX : Math.max(loX, Math.min(dx, hiX))),
+      y: Math.round(loY > hiY ? loY : Math.max(loY, Math.min(dy, hiY))),
+    };
   }
 
   // Keeps elements inside the margins
@@ -558,18 +586,22 @@
   loadSettings();
   initSampleBox();
 
-  // Save settings whenever they change
+  // Save settings once they've stopped changing (not on every step of a drag)
+  let saveSettingsTimer: ReturnType<typeof setTimeout> | undefined;
   $effect(() => {
-    const settings = {
+    const json = JSON.stringify({
       labelFormat, width, height, continuousWidth, continuousHeight, orientation,
       marginMode, customMargins, theme, defaultStyle, defaultShape,
       selectedPrinter, copies, printChoices, lastSaveDir, zoom
-    };
-    try {
-      localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
-    } catch (error) {
-      console.error('Failed to save settings:', error);
-    }
+    });
+    clearTimeout(saveSettingsTimer);
+    saveSettingsTimer = setTimeout(() => {
+      try {
+        localStorage.setItem(SETTINGS_KEY, json);
+      } catch (error) {
+        console.error('Failed to save settings:', error);
+      }
+    }, 300);
   });
 
   // Apply the theme. "system" leaves it to prefers-color-scheme.
@@ -1364,11 +1396,20 @@
     if (!selectedIds.includes(el.id)) {
       selectedIds = [el.id];
     }
+    const origs = selectedElements.map(e => $state.snapshot(e) as LabelElement);
     drag = {
       startX: event.clientX,
       startY: event.clientY,
-      origs: selectedElements.map(e => $state.snapshot(e) as LabelElement),
+      origs,
+      bounds: origs.map(elementBounds),
+      areas: origs.map(dragArea),
+      all: elements.map(e => ({
+        b: elementBounds(e),
+        inset: e.kind === 'text' ? BOX_INSET : 0,
+        moving: selectedIds.includes(e.id),
+      })),
     };
+    dragOffset = { x: 0, y: 0 };
     dragging = true;
   }
 
@@ -1496,8 +1537,24 @@
     selectedIds = m.additive ? [...new Set([...selectedIds, ...hits])] : hits;
   }
 
+  // Mice can report far more moves than the screen shows; apply at most one per frame
+  let pendingMove: MouseEvent | null = null;
+
   function handleGlobalMouseMove(event: MouseEvent) {
     lastPointer = { x: event.clientX, y: event.clientY };
+    if (!(resizingLabel || resize || endpointDrag || drag || marquee || pan)) return;
+    const scheduled = pendingMove !== null;
+    pendingMove = event;
+    if (!scheduled) {
+      requestAnimationFrame(() => {
+        const latest = pendingMove;
+        pendingMove = null;
+        if (latest) applyPointerMove(latest);
+      });
+    }
+  }
+
+  function applyPointerMove(event: MouseEvent) {
     if (resizingLabel) {
       // Change in pixels along the handle's axis, converted to whole millimetres
       const deltaPx = resizeEdge === "right"
@@ -1514,7 +1571,9 @@
     } else if (endpointDrag) {
       applyEndpoint(event.clientX, event.clientY, event.shiftKey);
     } else if (drag) {
-      moveGroup(drag.origs, (event.clientX - drag.startX) / zoom, (event.clientY - drag.startY) / zoom);
+      // Only the visual offset changes while dragging (no layout); positions update on release
+      dragOffset = groupDelta(drag.bounds, drag.areas, (event.clientX - drag.startX) / zoom, (event.clientY - drag.startY) / zoom);
+      if (resizeEdge) contentLength = lengthForBounds(drag.all, dragOffset);
     } else if (marquee) {
       marquee.x1 = event.clientX;
       marquee.y1 = event.clientY;
@@ -1550,11 +1609,20 @@
   }
 
   function handleMouseUp(event: MouseEvent) {
+    // Apply a move still waiting for the next frame, so the drop lands where the mouse is
+    if (pendingMove) {
+      applyPointerMove(pendingMove);
+      pendingMove = null;
+    }
     // Whether Shift is held on release decides the final shape
     if (resize) applyResize(event.clientX, event.clientY, event.shiftKey);
     if (endpointDrag) applyEndpoint(event.clientX, event.clientY, event.shiftKey);
-    if (clickThrough && Math.hypot(event.clientX - clickThrough.x, event.clientY - clickThrough.y) < 3) {
-      if (drag) moveGroup(drag.origs, 0, 0); // undo any sub-pixel nudge from the click
+    const isClick = clickThrough !== null && Math.hypot(event.clientX - clickThrough.x, event.clientY - clickThrough.y) < 3;
+    if (drag && !isClick && (dragOffset.x !== 0 || dragOffset.y !== 0)) {
+      moveGroup(drag.origs, dragOffset.x, dragOffset.y);
+    }
+    dragOffset = { x: 0, y: 0 };
+    if (isClick && clickThrough) {
       selectBeneath(clickThrough.id, event.clientX, event.clientY);
     }
     clickThrough = null;
@@ -2053,7 +2121,13 @@
       oncontextmenu={handleContextMenu}
     >
      <!-- Takes up the zoomed size so scrolling works; the label inside is scaled -->
-     <div class="label-sizer" style:width="{renderWidth * zoom}mm" style:height="{renderHeight * zoom}mm">
+     <div
+       class="label-sizer"
+       class:grows-down={resizeEdge === "bottom"}
+       class:grows-right={resizeEdge === "right"}
+       style:width="{renderWidth * zoom}mm"
+       style:height="{renderHeight * zoom}mm"
+     >
       <div
         class="label-preview"
         class:die-cut={currentFormat !== null && currentFormat.height !== null}
@@ -2093,6 +2167,7 @@
               class="element line-element"
               class:selected={selectedIds.includes(el.id)}
               class:dragging={dragging && selectedIds.includes(el.id)}
+              style:translate={dragging && selectedIds.includes(el.id) ? `${dragOffset.x}px ${dragOffset.y}px` : null}
               data-element-id={el.id}
               style:left="{el.x1}px"
               style:top="{el.y1 - LINE_HIT_AREA / zoom / 2}px"
@@ -2108,8 +2183,10 @@
             </div>
             {#if selected?.id === el.id}
               <div class="handle endpoint" style:left="{el.x1}px" style:top="{el.y1}px"
+                style:translate={dragging ? `${dragOffset.x}px ${dragOffset.y}px` : null}
                 onmousedown={(e) => startEndpointDrag(e, el, 1)} role="button" tabindex="-1" aria-label="Move line start"></div>
               <div class="handle endpoint" style:left="{el.x2}px" style:top="{el.y2}px"
+                style:translate={dragging ? `${dragOffset.x}px ${dragOffset.y}px` : null}
                 onmousedown={(e) => startEndpointDrag(e, el, 2)} role="button" tabindex="-1" aria-label="Move line end"></div>
             {/if}
           {:else}
@@ -2119,6 +2196,7 @@
               class:selected={selectedIds.includes(el.id)}
               class:editing={editingBoxId === el.id}
               class:dragging={dragging && selectedIds.includes(el.id)}
+              style:translate={dragging && selectedIds.includes(el.id) ? `${dragOffset.x}px ${dragOffset.y}px` : null}
               class:quarter-turn={rotationOf(el) % 180 !== 0}
               class:hollow={el.kind === 'rect' && !el.fill}
               style:--stroke={el.kind === 'rect' ? `${el.stroke}pt` : null}
@@ -2381,9 +2459,9 @@
         <p class="status" class:error={status.error}>{status.text}</p>
       {/if}
       <div class="output-buttons">
-        <button class="secondary-button" onclick={savePdf} disabled={busy}>Save PDF…</button>
+        <button class="secondary-button" onclick={savePdf} disabled={busy}>Save PDF</button>
         <button class="print-button" onclick={openPrintDialog} disabled={busy} title="Print (Ctrl+P)">
-          {busy ? 'Working…' : 'Print…'}
+          {busy ? 'Working…' : 'Print'}
         </button>
       </div>
     </div>
@@ -2829,6 +2907,16 @@
     margin: auto;
   }
 
+  /* A continuous label keeps its start in place so only the cut end moves when it
+     grows (centring would move both ends, half as far as the mouse) */
+  .label-sizer.grows-down {
+    margin-top: 0;
+  }
+
+  .label-sizer.grows-right {
+    margin-left: 0;
+  }
+
   .zoom-bar {
     display: flex;
     align-items: center;
@@ -2992,8 +3080,10 @@
     cursor: move;
   }
 
+  /* Dragged elements move on their own compositor layer */
   .element.dragging {
     opacity: 0.85;
+    will-change: translate;
   }
 
   .element.selected:not(.text-box):not(.line-element) {
