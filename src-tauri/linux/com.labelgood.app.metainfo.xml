@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- AppStream metadata, so software centers (GNOME Software, KDE Discover) list the installed app -->
+<component type="desktop-application">
+  <id>com.labelgood.app</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Labelgood</name>
+  <summary>Label editor and printer</summary>
+  <developer id="io.github.notcoffee418">
+    <name>Stijn Raeymaekers</name>
+  </developer>
+  <description>
+    <p>
+      Design labels for label printers such as the Brother QL series with text, lines,
+      rectangles and images, then print them directly or save them as PDF.
+    </p>
+    <p>
+      Printing goes through CUPS, and the print dialog shows whatever options the
+      printer's driver offers, such as cutting, quality and media type.
+    </p>
+  </description>
+  <!-- Tauri names the desktop file after productName -->
+  <launchable type="desktop-id">Labelgood.desktop</launchable>
+  <provides>
+    <binary>labelgood</binary>
+  </provides>
+  <url type="homepage">https://github.com/NotCoffee418/Labelgood</url>
+  <url type="bugtracker">https://github.com/NotCoffee418/Labelgood/issues</url>
+  <screenshots>
+    <screenshot type="default">
+      <caption>Designing a label</caption>
+      <image>https://raw.githubusercontent.com/NotCoffee418/Labelgood/main/images/labelgood_preview.png</image>
+    </screenshot>
+  </screenshots>
+  <categories>
+    <category>Utility</category>
+  </categories>
+  <content_rating type="oars-1.1"/>
+  <!-- Filled in by the release workflow -->
+  <releases>
+  </releases>
+</component>

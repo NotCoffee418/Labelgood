@@ -42,6 +42,23 @@
     "longDescription": "Design labels for label printers such as the Brother QL series and print them directly or save them as PDF.",
     "publisher": "Stijn Raeymaekers",
     "homepage": "https://github.com/NotCoffee418/Labelgood",
-    "license": "MIT"
+    "license": "MIT",
+    "linux": {
+      "deb": {
+        "files": {
+          "/usr/share/metainfo/com.labelgood.app.metainfo.xml": "linux/com.labelgood.app.metainfo.xml"
+        }
+      },
+      "rpm": {
+        "files": {
+          "/usr/share/metainfo/com.labelgood.app.metainfo.xml": "linux/com.labelgood.app.metainfo.xml"
+        }
+      },
+      "appimage": {
+        "files": {
+          "/usr/share/metainfo/com.labelgood.app.metainfo.xml": "linux/com.labelgood.app.metainfo.xml"
+        }
+      }
+    }
   }
 }

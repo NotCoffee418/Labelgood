@@ -104,6 +104,8 @@ jobs:
         run: |
           # Packages take their version from the tag (passed as a file to avoid shell quoting issues)
           echo "{\"version\":\"${GITHUB_REF_NAME#v}\"}" > release-version.json
+          # Software centers show the version and date from the AppStream metadata
+          sed -i "s|^  <releases>\$|&\n    <release version=\"${GITHUB_REF_NAME#v}\" date=\"$(date -u +%F)\"/>|" src-tauri/linux/com.labelgood.app.metainfo.xml
           # The cargo cache restores old packages too; start from an empty bundle folder
           rm -rf src-tauri/target/release/bundle
           # Tauri's bundler (pinned via package-lock.json) builds the frontend, the app and the packages
