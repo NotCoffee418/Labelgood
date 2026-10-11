@@ -20,21 +20,22 @@ echo "  Labelgood Installation Script"
 echo "======================================"
 echo ""
 
-# Detect architecture
+# Detect architecture (only Linux amd64 binaries are published)
 detect_arch() {
+    local os=$(uname -s)
+    if [ "$os" != "Linux" ]; then
+        echo -e "${RED}Error: Unsupported operating system: $os (only Linux is supported by this script)${NC}" >&2
+        exit 1
+    fi
+
     local arch=$(uname -m)
     case $arch in
         x86_64)
             echo "amd64"
             ;;
-        aarch64|arm64)
-            echo "arm64"
-            ;;
-        armv7l|armv7)
-            echo "armv7"
-            ;;
         *)
             echo -e "${RED}Error: Unsupported architecture: $arch${NC}" >&2
+            echo "Prebuilt binaries are only available for x86_64. Please build from source." >&2
             exit 1
             ;;
     esac
@@ -42,14 +43,14 @@ detect_arch() {
 
 # Get the latest release version
 get_latest_version() {
-    echo -e "${YELLOW}Fetching latest release information...${NC}"
+    echo -e "${YELLOW}Fetching latest release information...${NC}" >&2
     
     # Try to use jq if available for robust JSON parsing
     if command -v jq &> /dev/null; then
-        local version=$(curl -sL "https://api.github.com/repos/${REPO}/releases/latest" | jq -r '.tag_name')
+        local version=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | jq -r '.tag_name')
     else
         # Fallback to grep/sed if jq is not available
-        local version=$(curl -sL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | head -1 | sed -E 's/.*"tag_name"[^"]*"([^"]+)".*/\1/')
+        local version=$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest" | grep '"tag_name":' | head -1 | sed -E 's/.*"tag_name"[^"]*"([^"]+)".*/\1/')
     fi
     
     if [ -z "$version" ] || [ "$version" = "null" ]; then
@@ -62,8 +63,9 @@ get_latest_version() {
 
 # Download and install
 install_labelgood() {
-    local arch=$(detect_arch)
-    local version=$(get_latest_version)
+    local arch version
+    arch=$(detect_arch)
+    version=$(get_latest_version)
     
     echo -e "${GREEN}Detected architecture: $arch${NC}"
     echo -e "${GREEN}Latest version: $version${NC}"
@@ -79,8 +81,9 @@ install_labelgood() {
     cd "$tmp_dir"
     
     # Download the archive
-    if ! curl -L -o "$filename" "$download_url"; then
+    if ! curl -fL -o "$filename" "$download_url"; then
         echo -e "${RED}Error: Failed to download Labelgood${NC}" >&2
+        cd - > /dev/null
         rm -rf "$tmp_dir"
         exit 1
     fi

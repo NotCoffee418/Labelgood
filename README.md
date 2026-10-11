@@ -6,7 +6,7 @@ A desktop application built with Tauri + Svelte + TypeScript.
 
 ## Installation
 
-### Quick Install (Linux/macOS)
+### Quick Install (Linux)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/NotCoffee418/Labelgood/main/install.sh | bash
@@ -24,7 +24,7 @@ irm https://raw.githubusercontent.com/NotCoffee418/Labelgood/main/install.ps1 | 
 
 Download the latest release for your platform from the [releases page](https://github.com/NotCoffee418/Labelgood/releases/latest):
 
-- **Linux**: `labelgood-VERSION-linux-ARCH.tar.gz` (amd64, arm64, or armv7)
+- **Linux**: `labelgood-VERSION-linux-amd64.tar.gz`
 - **Windows**: `labelgood-VERSION-windows-amd64.zip`
 
 Extract the archive and run the binary.

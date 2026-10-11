@@ -97,7 +97,8 @@ jobs:
 
       - name: Build binary
         run: |
-          cargo build --release --manifest-path=src-tauri/Cargo.toml --target ${{ matrix.target }}
+          # tauri/custom-protocol embeds the built frontend; without it the binary loads the dev server URL
+          cargo build --release --features tauri/custom-protocol --manifest-path=src-tauri/Cargo.toml --target ${{ matrix.target }}
           mkdir -p dist/${{ matrix.arch }}
           cp src-tauri/target/${{ matrix.target }}/release/labelgood dist/${{ matrix.arch }}/
           tar -czf labelgood-${{ github.ref_name }}-linux-${{ matrix.arch }}.tar.gz -C dist/${{ matrix.arch }} labelgood
@@ -140,7 +141,8 @@ jobs:
 
       - name: Build binary
         run: |
-          cargo build --release --manifest-path=src-tauri/Cargo.toml
+          # tauri/custom-protocol embeds the built frontend; without it the binary loads the dev server URL
+          cargo build --release --features tauri/custom-protocol --manifest-path=src-tauri/Cargo.toml
           mkdir dist
           copy src-tauri\target\release\labelgood.exe dist\
           Compress-Archive -Path dist\labelgood.exe -DestinationPath labelgood-${{ github.ref_name }}-windows-amd64.zip

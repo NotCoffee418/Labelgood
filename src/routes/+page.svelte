@@ -21,6 +21,7 @@
 
   // State for settings
   let rememberSettings = $state(false);
+  const SETTINGS_KEY = 'labelgood-settings';
 
   // State for printer selection
   let printers = $state<string[]>([]);
@@ -74,13 +75,66 @@
     return viewRotation === "rotated" ? actualWidth() : actualHeight();
   });
 
+  // Edge of the view that resizes the continuous dimension.
+  // When the view is rotated, label width runs vertically and height horizontally.
+  const resizeEdge = $derived(
+    continuousWidth ? (viewRotation === "rotated" ? "bottom" : "right")
+    : continuousHeight ? (viewRotation === "rotated" ? "right" : "bottom")
+    : null
+  );
+
+  // Restore saved settings (only saved when "Remember Settings" is enabled)
+  function loadSettings() {
+    try {
+      const saved = localStorage.getItem(SETTINGS_KEY);
+      if (!saved) return;
+      const s = JSON.parse(saved);
+      width = s.width ?? width;
+      height = s.height ?? height;
+      continuousWidth = s.continuousWidth ?? continuousWidth;
+      continuousHeight = s.continuousHeight ?? continuousHeight;
+      viewRotation = s.viewRotation ?? viewRotation;
+      fontSize = s.fontSize ?? fontSize;
+      fontFamily = s.fontFamily ?? fontFamily;
+      fontColor = s.fontColor ?? fontColor;
+      fontWeight = s.fontWeight ?? fontWeight;
+      fontStyle = s.fontStyle ?? fontStyle;
+      printMode = s.printMode ?? printMode;
+      selectedPrinter = s.selectedPrinter ?? selectedPrinter;
+      rememberSettings = true;
+    } catch (error) {
+      console.error('Failed to load settings:', error);
+    }
+  }
+
+  loadSettings();
+
+  // Persist settings while "Remember Settings" is enabled; forget them when disabled
+  $effect(() => {
+    const settings = {
+      width, height, continuousWidth, continuousHeight, viewRotation,
+      fontSize, fontFamily, fontColor, fontWeight, fontStyle,
+      printMode, selectedPrinter
+    };
+    try {
+      if (rememberSettings) {
+        localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+      } else {
+        localStorage.removeItem(SETTINGS_KEY);
+      }
+    } catch (error) {
+      console.error('Failed to save settings:', error);
+    }
+  });
+
   // Load available printers on mount
   async function loadPrinters() {
     try {
       const printerList = await invoke<string[]>('list_printers');
       printers = printerList;
-      if (printerList.length > 0) {
-        selectedPrinter = printerList[0];
+      // Keep the current selection if that printer is still available
+      if (!printerList.includes(selectedPrinter)) {
+        selectedPrinter = printerList[0] ?? "";
       }
     } catch (error) {
       console.error('Failed to load printers:', error);
@@ -100,27 +154,19 @@
         return;
       }
 
-      // Temporarily hide all interactive elements (delete buttons, resize handles)
-      const deleteButtons = contentElement.querySelectorAll('.delete-btn');
-      const resizeHandles = contentElement.querySelectorAll('.resize-handle');
-      const textBoxes = contentElement.querySelectorAll('.text-box');
-
-      // Hide interactive elements
-      deleteButtons.forEach((btn: Element) => {
-        (btn as HTMLElement).style.display = 'none';
-      });
-      resizeHandles.forEach((handle: Element) => {
-        (handle as HTMLElement).style.display = 'none';
-      });
-      // Remove borders and hover effects from text boxes
-      textBoxes.forEach((box: Element) => {
-        (box as HTMLElement).style.border = 'none';
-        (box as HTMLElement).style.background = 'transparent';
-      });
-
       // Get the actual label dimensions (not rotated for display)
       const labelWidthMm = actualWidth();
       const labelHeightMm = actualHeight();
+
+      if (!(labelWidthMm > 0) || !(labelHeightMm > 0)) {
+        alert('Please enter a valid label width and height.');
+        return;
+      }
+
+      if (printMode === "print" && !selectedPrinter) {
+        alert('Please select a printer.');
+        return;
+      }
 
       // Calculate target resolution: 300 DPI for high quality
       const dpi = 300;
@@ -128,26 +174,38 @@
       const targetWidthPx = Math.round(labelWidthMm * mmToInch * dpi);
       const targetHeightPx = Math.round(labelHeightMm * mmToInch * dpi);
 
-      // Capture the element at high resolution
-      // html2canvas will capture it as displayed (rotated if view is rotated)
-      const canvas = await html2canvas(contentElement, {
-        backgroundColor: '#ffffff',
-        scale: 4, // High quality capture
-        logging: false,
-        useCORS: true
+      // Temporarily hide all interactive elements (delete buttons, resize handles)
+      const deleteButtons = contentElement.querySelectorAll<HTMLElement>('.delete-btn');
+      const resizeHandles = contentElement.querySelectorAll<HTMLElement>('.resize-handle');
+      const boxElements = contentElement.querySelectorAll<HTMLElement>('.text-box');
+
+      deleteButtons.forEach((btn) => btn.style.display = 'none');
+      resizeHandles.forEach((handle) => handle.style.display = 'none');
+      // Remove borders and hover effects from text boxes
+      boxElements.forEach((box) => {
+        box.style.border = 'none';
+        box.style.background = 'transparent';
       });
 
-      // Restore interactive elements
-      deleteButtons.forEach((btn: Element) => {
-        (btn as HTMLElement).style.display = '';
-      });
-      resizeHandles.forEach((handle: Element) => {
-        (handle as HTMLElement).style.display = '';
-      });
-      textBoxes.forEach((box: Element) => {
-        (box as HTMLElement).style.border = '';
-        (box as HTMLElement).style.background = '';
-      });
+      // Capture the element at high resolution
+      // html2canvas will capture it as displayed (rotated if view is rotated)
+      let canvas: HTMLCanvasElement;
+      try {
+        canvas = await html2canvas(contentElement, {
+          backgroundColor: '#ffffff',
+          scale: 4, // High quality capture
+          logging: false,
+          useCORS: true
+        });
+      } finally {
+        // Restore interactive elements, even if the capture failed
+        deleteButtons.forEach((btn) => btn.style.display = '');
+        resizeHandles.forEach((handle) => handle.style.display = '');
+        boxElements.forEach((box) => {
+          box.style.border = '';
+          box.style.background = '';
+        });
+      }
 
       // Create final canvas at exact dimensions for PDF
       const finalCanvas = document.createElement('canvas');
@@ -165,15 +223,18 @@
         }
         
         // Rotate the image back to original orientation
-        // Translate to center, rotate 90° clockwise, then draw
+        // Translate to center, rotate 90° clockwise, then draw.
+        // In the rotated coordinate system the axes are swapped, so the captured
+        // image (label height wide, label width tall) is drawn at
+        // targetHeightPx x targetWidthPx.
         ctx.translate(finalCanvas.width / 2, finalCanvas.height / 2);
         ctx.rotate(Math.PI / 2); // 90 degrees clockwise
         ctx.drawImage(
           canvas,
-          -canvas.height / 2, // Use canvas height because dimensions are swapped
-          -canvas.width / 2,
-          canvas.height,
-          canvas.width
+          -targetHeightPx / 2,
+          -targetWidthPx / 2,
+          targetHeightPx,
+          targetWidthPx
         );
       } else {
         // No rotation needed, just resize to exact dimensions
@@ -205,106 +266,12 @@
       });
 
       if (printMode === "print") {
-        alert(`Sent to printer: ${result}`);
+        alert(result);
       }
     } catch (error) {
       console.error('Failed to generate PDF:', error);
       alert(`Failed to generate PDF: ${error}`);
     }
-  }
-
-  // Generate clean HTML for printing (without editorial elements)
-  function generatePrintHtml(): string {
-    // Get the actual dimensions of the preview container to calculate scale
-    const previewWidthMm = viewRotation === "rotated" ? actualHeight() : actualWidth();
-    const previewHeightMm = viewRotation === "rotated" ? actualWidth() : actualHeight();
-    const previewWidthPx = contentElement?.offsetWidth || (previewWidthMm * 3.7795275591); // mm to px at 96 DPI
-    const previewHeightPx = contentElement?.offsetHeight || (previewHeightMm * 3.7795275591);
-
-    // Build HTML with inline styles to ensure proper rendering
-    const styles = `
-      * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-      }
-
-      @page {
-        margin: 0;
-        padding: 0;
-      }
-
-      html, body {
-        margin: 0;
-        padding: 0;
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-      }
-
-      .label-container {
-        position: relative;
-        width: 100%;
-        height: 100%;
-        background: white;
-      }
-
-      .text-box {
-        position: absolute;
-        white-space: pre-wrap;
-        word-wrap: break-word;
-      }
-    `;
-
-    // Build text boxes HTML with proper coordinate transformation
-    const textBoxesHtml = textBoxes.map(box => {
-      // Transform coordinates if rotated
-      let printX, printY;
-      if (viewRotation === "rotated") {
-        // When rotated: swap and adjust coordinates
-        // Editor shows: width=height, height=width
-        // We need to transform back to original orientation for PDF
-        printX = box.y;
-        printY = previewWidthPx - box.x;
-      } else {
-        printX = box.x;
-        printY = box.y;
-      }
-
-      return `
-        <div class="text-box" style="
-          left: ${printX}px;
-          top: ${printY}px;
-          font-family: ${fontFamily};
-          font-size: ${fontSize}px;
-          color: ${fontColor};
-          font-weight: ${fontWeight};
-          font-style: ${fontStyle};
-        ">${escapeHtml(box.text)}</div>
-      `;
-    }).join('');
-
-    return `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <style>${styles}</style>
-      </head>
-      <body>
-        <div class="label-container">
-          ${textBoxesHtml}
-        </div>
-      </body>
-      </html>
-    `;
-  }
-
-  // Helper function to escape HTML special characters
-  function escapeHtml(text: string): string {
-    const div = document.createElement('div');
-    div.textContent = text;
-    return div.innerHTML;
   }
 
   // Resize handle handlers
@@ -323,18 +290,20 @@
 
   function handleGlobalMouseMove(event: MouseEvent) {
     if (resizingLabel) {
+      // Calculate change in pixels along the handle's axis and convert to mm
+      // (approx 3.78 px per mm at 96 DPI), rounded to whole millimetres
+      const deltaPx = resizeEdge === "right"
+        ? event.clientX - resizeStartPos.x
+        : event.clientY - resizeStartPos.y;
+      const newDimension = Math.max(10, Math.round(resizeStartDimension + deltaPx / 3.78));
       if (continuousWidth) {
-        // Calculate change in pixels and convert to mm (approx 3.78 px per mm at 96 DPI)
-        const deltaX = event.clientX - resizeStartPos.x;
-        const deltaMm = deltaX / 3.78;
-        width = Math.max(10, resizeStartDimension + deltaMm);
+        width = newDimension;
       } else if (continuousHeight) {
-        const deltaY = event.clientY - resizeStartPos.y;
-        const deltaMm = deltaY / 3.78;
-        height = Math.max(10, resizeStartDimension + deltaMm);
+        height = newDimension;
       }
       return;
     }
+    handleMouseMove(event);
   }
 
   function stopResize() {
@@ -349,16 +318,16 @@
       return;
     }
     
+    // Clicking the delete button should not start a drag
+    if (target.closest('.delete-btn')) {
+      return;
+    }
+    
     event.preventDefault();
     draggingBox = boxId;
-    const box = textBoxes.find(b => b.id === boxId);
-    if (box) {
-      const previewRect = contentElement.getBoundingClientRect();
-      const targetElement = event.currentTarget as HTMLElement;
-      const targetRect = targetElement.getBoundingClientRect();
-      dragOffset.x = event.clientX - targetRect.left;
-      dragOffset.y = event.clientY - targetRect.top;
-    }
+    const targetRect = (event.currentTarget as HTMLElement).getBoundingClientRect();
+    dragOffset.x = event.clientX - targetRect.left;
+    dragOffset.y = event.clientY - targetRect.top;
   }
 
   function handleMouseMove(event: MouseEvent) {
@@ -466,7 +435,6 @@
           --print-rotation: {viewRotation === 'rotated' ? '-90deg' : '0deg'};
         "
         bind:this={contentElement}
-        onmousemove={handleMouseMove}
         role="region"
         aria-label="Label preview"
       >
@@ -500,11 +468,11 @@
         {/each}
         
         <!-- Resize handles for continuous dimensions -->
-        {#if continuousWidth}
+        {#if resizeEdge === "right"}
           <div 
             class="resize-handle resize-handle-right"
             onmousedown={startResize}
-            title="Drag to resize width"
+            title="Drag to resize {continuousWidth ? 'width' : 'height'}"
             role="button"
             tabindex="0"
           >
@@ -512,11 +480,11 @@
           </div>
         {/if}
         
-        {#if continuousHeight}
+        {#if resizeEdge === "bottom"}
           <div 
             class="resize-handle resize-handle-bottom"
             onmousedown={startResize}
-            title="Drag to resize height"
+            title="Drag to resize {continuousWidth ? 'width' : 'height'}"
             role="button"
             tabindex="0"
           >

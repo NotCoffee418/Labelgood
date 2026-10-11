@@ -1,6 +1,7 @@
+use base64::Engine;
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::process::Command;
+use std::io::Write;
+use std::process::{Command, Output};
 use tempfile::Builder;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -39,6 +40,24 @@ fn list_printers() -> Result<Vec<String>, String> {
     Ok(printers)
 }
 
+/// Formats a millimetre value for CUPS, keeping up to two decimals (e.g. "62", "87.5")
+fn format_mm(value: f64) -> String {
+    let formatted = format!("{:.2}", value);
+    formatted.trim_end_matches('0').trim_end_matches('.').to_string()
+}
+
+/// Runs ImageMagick, preferring the IMv7 `magick` binary and falling back to the
+/// legacy IMv6 `convert`. The fallback is skipped on Windows, where `convert.exe`
+/// is an unrelated system tool for converting FAT volumes to NTFS.
+fn run_imagemagick(args: &[String]) -> std::io::Result<Output> {
+    match Command::new("magick").args(args).output() {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound && !cfg!(windows) => {
+            Command::new("convert").args(args).output()
+        }
+        result => result,
+    }
+}
+
 #[tauri::command]
 async fn generate_pdf(options: PrintOptions) -> Result<String, String> {
     // Decode base64 image data
@@ -46,17 +65,27 @@ async fn generate_pdf(options: PrintOptions) -> Result<String, String> {
         .strip_prefix("data:image/png;base64,")
         .unwrap_or(&options.image_data);
 
-    let image_bytes = base64::decode(image_data)
+    if !(options.width_mm > 0.0 && options.height_mm > 0.0) {
+        return Err(format!(
+            "Invalid label dimensions: {}x{} mm",
+            options.width_mm, options.height_mm
+        ));
+    }
+
+    let image_bytes = base64::engine::general_purpose::STANDARD
+        .decode(image_data)
         .map_err(|e| format!("Failed to decode base64 image: {}", e))?;
 
     // Create temporary PNG file
-    let temp_png = Builder::new()
+    let mut temp_png = Builder::new()
         .suffix(".png")
         .tempfile()
         .map_err(|e| format!("Failed to create temp PNG file: {}", e))?;
     let png_path = temp_png.path().to_string_lossy().to_string();
 
-    fs::write(&png_path, &image_bytes)
+    temp_png
+        .write_all(&image_bytes)
+        .and_then(|_| temp_png.flush())
         .map_err(|e| format!("Failed to write PNG file: {}", e))?;
 
     // Create persistent PDF file in temp directory
@@ -79,21 +108,24 @@ async fn generate_pdf(options: PrintOptions) -> Result<String, String> {
     let width_points = options.width_mm * 2.83465; // mm to points (1mm = 2.83465pt)
     let height_points = options.height_mm * 2.83465;
     
+    let width_points = width_points.round().max(1.0) as u32;
+    let height_points = height_points.round().max(1.0) as u32;
+
     println!("Creating PDF: {}x{} mm ({}x{} points)", 
              options.width_mm, options.height_mm,
-             width_points as u32, height_points as u32);
+             width_points, height_points);
 
     // Convert PNG to PDF preserving dimensions:
     // The key is to read at 300 DPI and write at 72 DPI (PDF standard)
     // This causes ImageMagick to scale appropriately
-    let result = Command::new("convert")
-        .arg(&png_path)
-        .arg("-density").arg("300") // Input PNG is at 300 DPI
-        .arg("-units").arg("PixelsPerInch")
-        .arg("-density").arg("72") // Output PDF at 72 DPI (standard)
-        .arg("-page").arg(format!("{}x{}", width_points as u32, height_points as u32)) // Set PDF page size in points
-        .arg(&pdf_path_str)
-        .output();
+    let result = run_imagemagick(&[
+        png_path.clone(),
+        "-density".into(), "300".into(), // Input PNG is at 300 DPI
+        "-units".into(), "PixelsPerInch".into(),
+        "-density".into(), "72".into(), // Output PDF at 72 DPI (standard)
+        "-page".into(), format!("{}x{}", width_points, height_points), // Set PDF page size in points
+        pdf_path_str.clone(),
+    ]);
 
     match result {
         Ok(output) if output.status.success() => {
@@ -111,8 +143,8 @@ async fn generate_pdf(options: PrintOptions) -> Result<String, String> {
                 // CUPS/lpr to use that size and not fit it to A4 or other default sizes
                 
                 // Calculate dimensions in different units for CUPS compatibility
-                let width_mm = options.width_mm as u32;
-                let height_mm = options.height_mm as u32;
+                let width_mm = format_mm(options.width_mm);
+                let height_mm = format_mm(options.height_mm);
                 
                 println!("Printing to: {}", printer_name);
                 println!("PDF path: {}", pdf_path_str);
@@ -155,7 +187,7 @@ async fn generate_pdf(options: PrintOptions) -> Result<String, String> {
             let error = String::from_utf8_lossy(&output.stderr);
             eprintln!("ImageMagick convert failed. stderr: {}", error);
             eprintln!("ImageMagick stdout: {}", String::from_utf8_lossy(&output.stdout));
-            return Err(format!("ImageMagick convert failed: {}. Make sure ImageMagick is installed.", error));
+            return Err(format!("ImageMagick conversion failed: {}. Make sure ImageMagick is installed.", error));
         }
         Err(e) => {
             return Err(format!(
