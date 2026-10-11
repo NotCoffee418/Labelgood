@@ -251,8 +251,12 @@
   const clampLength = (mm: number) => Math.min(MAX_LENGTH_MM, Math.max(MIN_LENGTH_MM, Number(mm) || MIN_LENGTH_MM));
 
   // Actual label dimensions (respecting continuous settings), used for printing
-  const actualWidth = $derived(continuousWidth ? clampLength(width) : width);
-  const actualHeight = $derived(continuousHeight ? clampLength(height) : height);
+  // Length a continuous label needs to fit everything inside its margins (0 = no constraint).
+  // The user's own length (width/height) is kept; the label is never shorter than this.
+  let contentLength = $state(0);
+
+  const actualWidth = $derived(continuousWidth ? clampLength(Math.max(width, contentLength)) : width);
+  const actualHeight = $derived(continuousHeight ? clampLength(Math.max(height, contentLength)) : height);
 
   // Whether the label's long edge (its length) is the width.
   // A continuous dimension is always the length, so dragging it never flips the view.
@@ -394,16 +398,51 @@
   }
 
   // Printable area in px. Text boxes may extend past it by their padding, so
-  // their text (not their outline) lines up with the margins.
-  function printableArea(inset: number) {
+  // their text (not their outline) lines up with the margins. With `growable`, the
+  // far end of a continuous label is open: the label lengthens to fit instead.
+  function printableArea(inset: number, growable = false) {
     const m = displayMargins;
     return {
       minX: m.left * PX_PER_MM - inset,
       minY: m.top * PX_PER_MM - inset,
-      maxX: (contentElement?.clientWidth ?? renderWidth * PX_PER_MM) - m.right * PX_PER_MM + inset,
-      maxY: (contentElement?.clientHeight ?? renderHeight * PX_PER_MM) - m.bottom * PX_PER_MM + inset,
+      maxX: growable && resizeEdge === "right" ? Infinity
+        : (contentElement?.clientWidth ?? renderWidth * PX_PER_MM) - m.right * PX_PER_MM + inset,
+      maxY: growable && resizeEdge === "bottom" ? Infinity
+        : (contentElement?.clientHeight ?? renderHeight * PX_PER_MM) - m.bottom * PX_PER_MM + inset,
     };
   }
+
+  // Length (mm) a continuous label needs so every element stays inside the end margin
+  function measureContentLength(): number {
+    if (!resizeEdge || elements.length === 0) return 0;
+    const alongWidth = resizeEdge === "right";
+    let farEdge = 0;
+    for (const el of elements) {
+      const b = elementBounds(el);
+      // A text box's padding doesn't need to fit, only its text
+      const inset = el.kind === 'text' ? BOX_INSET : 0;
+      farEdge = Math.max(farEdge, (alongWidth ? b.x + b.w : b.y + b.h) - inset);
+    }
+    const endMargin = alongWidth ? displayMargins.right : displayMargins.bottom;
+    return Math.ceil(farEdge / PX_PER_MM + endMargin);
+  }
+
+  // Applies a typed continuous length as the user's length, then shows the effective
+  // length again (it can stay longer if the content needs it)
+  function commitLength(input: HTMLInputElement, axis: 'width' | 'height') {
+    const value = clampLength(Number(input.value));
+    if (axis === 'width') width = value;
+    else height = value;
+    tick().then(() => input.value = String(axis === 'width' ? actualWidth : actualHeight));
+  }
+
+  // Re-measure after anything that can move or resize elements has rendered
+  $effect(() => {
+    JSON.stringify(elements);
+    void displayMargins;
+    void resizeEdge;
+    tick().then(() => contentLength = measureContentLength());
+  });
 
   // How far to move something at `pos` with `size` to fit within [min, max] (to `min` if it can't)
   function shiftInto(pos: number, size: number, min: number, max: number): number {
@@ -434,7 +473,7 @@
   function moveGroup(origs: LabelElement[], dx: number, dy: number) {
     let loX = -Infinity, hiX = Infinity, loY = -Infinity, hiY = Infinity;
     for (const orig of origs) {
-      const area = printableArea(orig.kind === 'text' ? BOX_INSET : 0);
+      const area = printableArea(orig.kind === 'text' ? BOX_INSET : 0, true);
       const b = elementBounds(orig);
       loX = Math.max(loX, area.minX - b.x); hiX = Math.min(hiX, area.maxX - b.x - b.w);
       loY = Math.max(loY, area.minY - b.y); hiY = Math.min(hiY, area.maxY - b.y - b.h);
@@ -1625,7 +1664,7 @@
     event.stopPropagation();
     resizingLabel = true;
     resizeStartPos = { x: event.clientX, y: event.clientY };
-    resizeStartDimension = continuousWidth ? width : height;
+    resizeStartDimension = continuousWidth ? actualWidth : actualHeight;
   }
 
   // ---- Output ----
@@ -2026,6 +2065,16 @@
         role="region"
         aria-label="Label preview"
       >
+        <!-- Wavy edge where a continuous label is cut off the roll (first, so everything paints over it) -->
+        {#if resizeEdge && cutEdgePaths}
+          <svg class="cut-edge cut-edge-{resizeEdge}" aria-hidden="true">
+            <g transform={resizeEdge === "bottom" ? "matrix(0 1 1 0 0 0)" : undefined}>
+              <path d={cutEdgePaths.fill} fill="white" />
+              <path d={cutEdgePaths.wave} fill="none" stroke="#a9aeb6" stroke-width="1" vector-effect="non-scaling-stroke" />
+            </g>
+          </svg>
+        {/if}
+
         {#if marginMode !== "none"}
           <div
             class="margin-guide"
@@ -2136,16 +2185,6 @@
           {/if}
         {/each}
 
-        <!-- Wavy edge where a continuous label is cut off the roll -->
-        {#if resizeEdge && cutEdgePaths}
-          <svg class="cut-edge cut-edge-{resizeEdge}" aria-hidden="true">
-            <g transform={resizeEdge === "bottom" ? "matrix(0 1 1 0 0 0)" : undefined}>
-              <path d={cutEdgePaths.fill} fill="white" />
-              <path d={cutEdgePaths.wave} fill="none" stroke="#a9aeb6" stroke-width="1" vector-effect="non-scaling-stroke" />
-            </g>
-          </svg>
-        {/if}
-
         <!-- Resize handles for continuous dimensions -->
         {#if resizeEdge === "right"}
           <div
@@ -2253,11 +2292,12 @@
           <input
             id="width"
             type="number"
-            bind:value={width}
+            value={continuousWidth ? actualWidth : width}
             min={continuousWidth ? MIN_LENGTH_MM : 1}
             max={continuousWidth ? MAX_LENGTH_MM : undefined}
             step="any"
-            onchange={() => { if (continuousWidth) width = clampLength(width); }}
+            oninput={(e) => { if (!continuousWidth) width = Number(e.currentTarget.value); }}
+            onchange={(e) => { if (continuousWidth) commitLength(e.currentTarget, 'width'); }}
           />
           <label class="checkbox-label">
             <input type="checkbox" bind:checked={continuousWidth} onchange={handleContinuousWidth} />
@@ -2270,11 +2310,12 @@
           <input
             id="height"
             type="number"
-            bind:value={height}
+            value={continuousHeight ? actualHeight : height}
             min={continuousHeight ? MIN_LENGTH_MM : 1}
             max={continuousHeight ? MAX_LENGTH_MM : undefined}
             step="any"
-            onchange={() => { if (continuousHeight) height = clampLength(height); }}
+            oninput={(e) => { if (!continuousHeight) height = Number(e.currentTarget.value); }}
+            onchange={(e) => { if (continuousHeight) commitLength(e.currentTarget, 'height'); }}
           />
           <label class="checkbox-label">
             <input type="checkbox" bind:checked={continuousHeight} onchange={handleContinuousHeight} />
@@ -2287,12 +2328,12 @@
           <input
             id="length"
             type="number"
-            bind:value={height}
+            value={actualHeight}
             min={MIN_LENGTH_MM}
             max={MAX_LENGTH_MM}
             step="any"
             title="{MIN_LENGTH_MM}–{MAX_LENGTH_MM} mm"
-            onchange={() => height = clampLength(height)}
+            onchange={(e) => commitLength(e.currentTarget, 'height')}
           />
         </div>
       {/if}
