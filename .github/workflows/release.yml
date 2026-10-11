@@ -9,6 +9,14 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
+      - name: Check version tag
+        # Packages take their version from the tag; MSI installers only accept plain numeric versions
+        run: |
+          if [[ ! "$GITHUB_REF_NAME" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Tag '$GITHUB_REF_NAME' must look like v1.2.3"
+            exit 1
+          fi
+
       - uses: actions/checkout@v7.0.1
 
       - name: Setup Node.js
@@ -54,12 +62,15 @@ jobs:
 
   build-linux:
     needs: test
-    runs-on: ubuntu-latest
     strategy:
       matrix:
         include:
-          - target: x86_64-unknown-linux-gnu
-            arch: amd64
+          # Built natively on the oldest supported Ubuntu, so packages also run on older distros
+          - arch: amd64
+            runner: ubuntu-22.04
+          - arch: arm64
+            runner: ubuntu-22.04-arm
+    runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -72,14 +83,8 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build frontend
-        run: npm run build
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
-
-      - name: Add Rust target
-        run: rustup target add ${{ matrix.target }}
 
       - name: Install Tauri dependencies (Linux)
         run: |
@@ -93,25 +98,48 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             src-tauri/target
-          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ matrix.runner }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build binary
+      - name: Build packages
         run: |
-          # tauri/custom-protocol embeds the built frontend; without it the binary loads the dev server URL
-          cargo build --release --features tauri/custom-protocol --manifest-path=src-tauri/Cargo.toml --target ${{ matrix.target }}
-          mkdir -p dist/${{ matrix.arch }}
-          cp src-tauri/target/${{ matrix.target }}/release/labelgood dist/${{ matrix.arch }}/
-          tar -czf labelgood-${{ github.ref_name }}-linux-${{ matrix.arch }}.tar.gz -C dist/${{ matrix.arch }} labelgood
+          # Packages take their version from the tag (passed as a file to avoid shell quoting issues)
+          echo "{\"version\":\"${GITHUB_REF_NAME#v}\"}" > release-version.json
+          # The cargo cache restores old packages too; start from an empty bundle folder
+          rm -rf src-tauri/target/release/bundle
+          # Tauri's bundler (pinned via package-lock.json) builds the frontend, the app and the packages
+          npm run tauri build -- --bundles appimage,deb,rpm --config release-version.json
+          mkdir -p dist
+          # Fixed file names, so releases/latest/download/<name> links always work
+          cp src-tauri/target/release/bundle/appimage/*.AppImage dist/Labelgood-${{ matrix.arch }}.AppImage
+          cp src-tauri/target/release/bundle/deb/*.deb dist/Labelgood-${{ matrix.arch }}.deb
+          cp src-tauri/target/release/bundle/rpm/*.rpm dist/Labelgood-${{ matrix.arch }}.rpm
+          # Plain binary and icon for install.sh
+          mkdir -p plain
+          cp src-tauri/target/release/labelgood plain/
+          cp src-tauri/icons/128x128@2x.png plain/labelgood.png
+          tar -czf dist/labelgood-${GITHUB_REF_NAME}-linux-${{ matrix.arch }}.tar.gz -C plain labelgood labelgood.png
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7.0.1
         with:
           name: labelgood-linux-${{ matrix.arch }}
-          path: labelgood-${{ github.ref_name }}-linux-${{ matrix.arch }}.tar.gz
+          path: dist/*
+          if-no-files-found: error
 
   build-windows:
     needs: test
+    strategy:
+      matrix:
+        include:
+          - arch: x64
+            target: x86_64-pc-windows-msvc
+          # Cross-compiled on x64 Windows, as documented by Tauri
+          - arch: arm64
+            target: aarch64-pc-windows-msvc
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v7.0.1
 
@@ -124,11 +152,10 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Build frontend
-        run: npm run build
-
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
 
       - name: Cache cargo
         uses: actions/cache@v6.1.0
@@ -137,21 +164,39 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             src-tauri/target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-${{ matrix.target }}-cargo-${{ hashFiles('**/Cargo.lock') }}
 
-      - name: Build binary
+      - name: Build installer
         run: |
-          # tauri/custom-protocol embeds the built frontend; without it the binary loads the dev server URL
-          cargo build --release --features tauri/custom-protocol --manifest-path=src-tauri/Cargo.toml
-          mkdir dist
-          copy src-tauri\target\release\labelgood.exe dist\
-          Compress-Archive -Path dist\labelgood.exe -DestinationPath labelgood-${{ github.ref_name }}-windows-amd64.zip
+          # Packages take their version from the tag (passed as a file: npm runs commands through
+          # cmd.exe on Windows, which mangles quotes in inline JSON)
+          echo "{\"version\":\"${GITHUB_REF_NAME#v}\"}" > release-version.json
+          # The cargo cache restores old installers too; start from an empty bundle folder
+          rm -rf src-tauri/target/${{ matrix.target }}/release/bundle
+          # Tauri's bundler (pinned via package-lock.json) fetches NSIS itself, checksum-verified
+          npm run tauri build -- --target ${{ matrix.target }} --bundles nsis --config release-version.json
+          mkdir -p dist
+          # Fixed file names, so releases/latest/download/<name> links always work
+          cp src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*-setup.exe dist/Labelgood-setup-${{ matrix.arch }}.exe
+
+      - name: Build MSI
+        # ARM64 MSI support is recent in WiX/Tauri; don't hold up the release if only that fails
+        continue-on-error: ${{ matrix.arch == 'arm64' }}
+        run: |
+          npm run tauri bundle -- --target ${{ matrix.target }} --bundles msi --config release-version.json
+          cp src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi dist/Labelgood-${{ matrix.arch }}.msi
+
+      - name: Zip plain executable
+        # For portable use
+        shell: pwsh
+        run: Compress-Archive -Path src-tauri\target\${{ matrix.target }}\release\labelgood.exe -DestinationPath dist\Labelgood-portable-${{ matrix.arch }}.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7.0.1
         with:
-          name: labelgood-windows-amd64
-          path: labelgood-${{ github.ref_name }}-windows-amd64.zip
+          name: labelgood-windows-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
 
   release:
     needs: [build-linux, build-windows]
@@ -161,45 +206,32 @@ jobs:
     steps:
       - uses: actions/checkout@v7.0.1
 
-      - name: Get version
-        id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-
-      - name: Download Linux AMD64 artifact
+      - name: Download artifacts
         uses: actions/download-artifact@v8.0.1
         with:
-          name: labelgood-linux-amd64
-          path: artifacts
-
-      - name: Download Windows artifact
-        uses: actions/download-artifact@v8.0.1
-        with:
-          name: labelgood-windows-amd64
-          path: artifacts
-
-      - name: Prepare release assets
-        run: |
-          mkdir -p release-assets
-          cp artifacts/labelgood-${{ steps.get_version.outputs.VERSION }}-linux-*.tar.gz release-assets/
-          cp artifacts/labelgood-${{ steps.get_version.outputs.VERSION }}-windows-*.zip release-assets/
+          path: release-assets
+          merge-multiple: true
 
       - name: Create Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
         run: |
-          gh release create ${{ github.ref_name }} \
-            --title "Labelgood ${{ steps.get_version.outputs.VERSION }}" \
-            --notes "Release ${{ steps.get_version.outputs.VERSION }}
+          (cd release-assets && sha256sum * > SHA256SUMS.txt)
+          ls -l release-assets
+          gh release create "$TAG" \
+            --title "Labelgood $TAG" \
+            --notes "## Downloads
 
-          ## Downloads
+          | | x64 | ARM64 |
+          |---|---|---|
+          | **Windows installer** | \`Labelgood-setup-x64.exe\` | \`Labelgood-setup-arm64.exe\` |
+          | Windows MSI | \`Labelgood-x64.msi\` | \`Labelgood-arm64.msi\` |
+          | Windows portable | \`Labelgood-portable-x64.zip\` | \`Labelgood-portable-arm64.zip\` |
+          | **Debian/Ubuntu** | \`Labelgood-amd64.deb\` | \`Labelgood-arm64.deb\` |
+          | **Fedora/openSUSE** | \`Labelgood-amd64.rpm\` | \`Labelgood-arm64.rpm\` |
+          | Linux AppImage | \`Labelgood-amd64.AppImage\` | \`Labelgood-arm64.AppImage\` |
+          | Linux plain binary | \`labelgood-${TAG}-linux-amd64.tar.gz\` | \`labelgood-${TAG}-linux-arm64.tar.gz\` |
 
-          ### Linux
-          - **AMD64 (x86_64)**: \`labelgood-${{ steps.get_version.outputs.VERSION }}-linux-amd64.tar.gz\`
-
-          Extract with: \`tar -xzf labelgood-${{ steps.get_version.outputs.VERSION }}-linux-amd64.tar.gz\`
-
-          ### Windows
-          - **AMD64 (x86_64)**: \`labelgood-${{ steps.get_version.outputs.VERSION }}-windows-amd64.zip\`
-
-          Extract with Windows Explorer or: \`Expand-Archive labelgood-${{ steps.get_version.outputs.VERSION }}-windows-amd64.zip\`" \
+          Checksums: \`SHA256SUMS.txt\`" \
             release-assets/*

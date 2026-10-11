@@ -2,7 +2,10 @@
 set -e
 
 # Labelgood Installation Script
-# This script downloads and installs the latest version of Labelgood
+# Downloads the latest Labelgood release and installs it for the current user
+# (~/.local, no root needed). Run it again to update.
+#
+# Prefer a package? Releases also have an AppImage, a .deb and an .rpm.
 
 REPO="NotCoffee418/Labelgood"
 INSTALL_DIR="${HOME}/.local/bin"
@@ -20,7 +23,7 @@ echo "  Labelgood Installation Script"
 echo "======================================"
 echo ""
 
-# Detect architecture (only Linux amd64 binaries are published)
+# Detect architecture (Linux x86_64 and ARM64 binaries are published)
 detect_arch() {
     local os=$(uname -s)
     if [ "$os" != "Linux" ]; then
@@ -33,9 +36,12 @@ detect_arch() {
         x86_64)
             echo "amd64"
             ;;
+        aarch64|arm64)
+            echo "arm64"
+            ;;
         *)
             echo -e "${RED}Error: Unsupported architecture: $arch${NC}" >&2
-            echo "Prebuilt binaries are only available for x86_64. Please build from source." >&2
+            echo "Prebuilt binaries are available for x86_64 and ARM64. Please build from source." >&2
             exit 1
             ;;
     esac
@@ -118,6 +124,12 @@ install_labelgood() {
     echo -e "${YELLOW}Installing to ${INSTALL_DIR}...${NC}"
     mv labelgood "$INSTALL_DIR/"
     chmod +x "${INSTALL_DIR}/labelgood"
+
+    # Icon for the menu entry (included in newer releases)
+    if [ -f "labelgood.png" ]; then
+        mkdir -p "$ICON_DIR"
+        mv labelgood.png "${ICON_DIR}/labelgood.png"
+    fi
     
     # Clean up
     cd - > /dev/null
@@ -141,9 +153,10 @@ create_desktop_shortcut() {
 Version=1.0
 Type=Application
 Name=Labelgood
-Comment=Label management application
+Comment=Label editor and printer
 Exec=${INSTALL_DIR}/labelgood
 Icon=labelgood
+StartupWMClass=labelgood
 Terminal=false
 Categories=Utility;
 EOF
@@ -156,6 +169,27 @@ EOF
     fi
     
     echo -e "${GREEN}✓ Desktop shortcut created${NC}"
+}
+
+# The binary uses the system's WebKitGTK and GTK; tell the user what to install if they're missing
+check_runtime_libraries() {
+    if ! command -v ldd &> /dev/null; then
+        return
+    fi
+    local missing
+    missing=$(ldd "${INSTALL_DIR}/labelgood" 2>/dev/null | grep "not found" | awk '{print $1}' || true)
+    if [ -n "$missing" ]; then
+        echo ""
+        echo -e "${YELLOW}Labelgood needs some system libraries that aren't installed:${NC}"
+        echo "$missing" | sed 's/^/    /'
+        echo ""
+        echo "Install WebKitGTK 4.1, for example:"
+        echo "    Fedora:        sudo dnf install webkit2gtk4.1"
+        echo "    Debian/Ubuntu: sudo apt install libwebkit2gtk-4.1-0"
+        echo "    Arch:          sudo pacman -S webkit2gtk-4.1"
+        echo ""
+        echo "Or use the AppImage from the releases page, which includes them."
+    fi
 }
 
 # Check for required commands
@@ -180,6 +214,7 @@ main() {
     check_requirements
     install_labelgood
     create_desktop_shortcut
+    check_runtime_libraries
     
     echo ""
     echo "======================================"

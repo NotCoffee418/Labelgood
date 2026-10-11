@@ -1,184 +1,93 @@
-# Labelgood Installation Script for Windows
-# This script downloads and installs the latest version of Labelgood
+# Labelgood installation script for Windows
+# Downloads the latest release's installer and installs Labelgood for the current user
+# (no administrator rights needed). Run it again to update.
 
 $ErrorActionPreference = "Stop"
+# Windows PowerShell 5.1 may default to old TLS versions, and its progress bar slows downloads down a lot
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+$ProgressPreference = "SilentlyContinue"
 
 $REPO = "NotCoffee418/Labelgood"
-$INSTALL_DIR = "$env:LOCALAPPDATA\Programs\Labelgood"
-$DESKTOP_DIR = [Environment]::GetFolderPath("Desktop")
 
 Write-Host "======================================" -ForegroundColor Cyan
 Write-Host "  Labelgood Installation Script" -ForegroundColor Cyan
 Write-Host "======================================" -ForegroundColor Cyan
 Write-Host ""
 
-# Detect architecture
-function Get-Architecture {
-    $arch = $env:PROCESSOR_ARCHITECTURE
-    switch ($arch) {
-        "AMD64" { return "amd64" }
-        "x86_64" { return "amd64" }
-        default {
-            Write-Host "Error: Unsupported architecture: $arch" -ForegroundColor Red
-            exit 1
-        }
-    }
-}
-
-# Get the latest release version
-function Get-LatestVersion {
+function Get-Installer([string]$arch) {
     Write-Host "Fetching latest release information..." -ForegroundColor Yellow
-    
-    try {
-        $response = Invoke-RestMethod -Uri "https://api.github.com/repos/$REPO/releases/latest"
-        $version = $response.tag_name
-        
-        if ([string]::IsNullOrEmpty($version)) {
-            throw "Version not found in response"
-        }
-        
-        return $version
+    $release = Invoke-RestMethod -Uri "https://api.github.com/repos/$REPO/releases/latest"
+    $asset = $release.assets | Where-Object { $_.name -eq "Labelgood-setup-$arch.exe" } | Select-Object -First 1
+    if (-not $asset -and $arch -eq "arm64") {
+        # Older releases have no ARM64 build; Windows on ARM runs x64 apps through emulation
+        Write-Host "No ARM64 installer in this release; using the x64 one (runs through emulation)." -ForegroundColor Yellow
+        $asset = $release.assets | Where-Object { $_.name -eq "Labelgood-setup-x64.exe" } | Select-Object -First 1
     }
-    catch {
-        Write-Host "Error: Could not fetch latest version - $_" -ForegroundColor Red
-        exit 1
+    if (-not $asset) {
+        throw "The latest release ($($release.tag_name)) has no Windows installer"
+    }
+    Write-Host "Latest version: $($release.tag_name)" -ForegroundColor Green
+    return $asset
+}
+
+# Earlier versions of this script copied labelgood.exe into a folder and added it to PATH.
+# The installer replaces that, so remove the old copy (its desktop shortcut gets replaced).
+function Remove-OldPortableInstall {
+    $oldDir = Join-Path $env:LOCALAPPDATA "Programs\Labelgood"
+    if (Test-Path (Join-Path $oldDir "labelgood.exe")) {
+        Write-Host "Removing the old portable installation..." -ForegroundColor Yellow
+        Remove-Item $oldDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
+    $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+    if ($userPath) {
+        $parts = $userPath -split ';' | Where-Object { $_ -ne '' -and $_ -ne $oldDir }
+        $cleaned = $parts -join ';'
+        if ($cleaned -ne $userPath.TrimEnd(';')) {
+            [Environment]::SetEnvironmentVariable("Path", $cleaned, "User")
+        }
     }
 }
 
-# Download and install Labelgood
 function Install-Labelgood {
-    $arch = Get-Architecture
-    $version = Get-LatestVersion
-    
-    Write-Host "Detected architecture: $arch" -ForegroundColor Green
-    Write-Host "Latest version: $version" -ForegroundColor Green
-    Write-Host ""
-    
-    $filename = "labelgood-$version-windows-$arch.zip"
-    $downloadUrl = "https://github.com/$REPO/releases/download/$version/$filename"
-    
-    Write-Host "Downloading from: $downloadUrl" -ForegroundColor Yellow
-    
-    # Create temporary directory
+    $arch = switch ($env:PROCESSOR_ARCHITECTURE) {
+        "AMD64" { "x64" }
+        "ARM64" { "arm64" }
+        default { throw "Unsupported architecture: $env:PROCESSOR_ARCHITECTURE" }
+    }
+
+    $asset = Get-Installer $arch
     $tmpDir = Join-Path $env:TEMP "labelgood-install-$(Get-Random)"
     New-Item -ItemType Directory -Path $tmpDir -Force | Out-Null
-    
-    $zipPath = Join-Path $tmpDir $filename
-    
+    $setup = Join-Path $tmpDir $asset.name
+
     try {
-        # Download the archive
-        Invoke-WebRequest -Uri $downloadUrl -OutFile $zipPath -UseBasicParsing
-        
-        # Extract the archive
-        Write-Host "Extracting archive..." -ForegroundColor Yellow
-        Expand-Archive -Path $zipPath -DestinationPath $tmpDir -Force
-        
-        # Create install directory if it doesn't exist
-        if (-not (Test-Path $INSTALL_DIR)) {
-            New-Item -ItemType Directory -Path $INSTALL_DIR -Force | Out-Null
+        Write-Host "Downloading $($asset.name)..." -ForegroundColor Yellow
+        Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $setup -UseBasicParsing
+
+        Remove-OldPortableInstall
+
+        # /S = silent: installs for the current user with Start menu and desktop shortcuts
+        Write-Host "Installing..." -ForegroundColor Yellow
+        $process = Start-Process -FilePath $setup -ArgumentList "/S" -Wait -PassThru
+        if ($process.ExitCode -ne 0) {
+            throw "The installer exited with code $($process.ExitCode)"
         }
-        
-        # Check if binary already exists
-        $exePath = Join-Path $INSTALL_DIR "labelgood.exe"
-        if (Test-Path $exePath) {
-            Write-Host "Existing installation found. Removing old version..." -ForegroundColor Yellow
-            Remove-Item $exePath -Force
-        }
-        
-        # Move binary to install directory
-        Write-Host "Installing to $INSTALL_DIR..." -ForegroundColor Yellow
-        $extractedExe = Join-Path $tmpDir "labelgood.exe"
-        Move-Item $extractedExe $exePath -Force
-        
-        Write-Host "✓ Labelgood installed successfully!" -ForegroundColor Green
     }
     finally {
-        # Clean up
-        if (Test-Path $tmpDir) {
-            Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
-        }
+        Remove-Item $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
     }
 }
 
-# Create desktop shortcut
-function New-DesktopShortcut {
-    Write-Host ""
-    Write-Host "Creating desktop shortcut..." -ForegroundColor Yellow
-    
-    $exePath = Join-Path $INSTALL_DIR "labelgood.exe"
-    $shortcutPath = Join-Path $DESKTOP_DIR "Labelgood.lnk"
-    
-    $WScriptShell = New-Object -ComObject WScript.Shell
-    $Shortcut = $WScriptShell.CreateShortcut($shortcutPath)
-    $Shortcut.TargetPath = $exePath
-    $Shortcut.WorkingDirectory = $INSTALL_DIR
-    $Shortcut.Description = "Label management application"
-    $Shortcut.Save()
-    
-    Write-Host "✓ Desktop shortcut created" -ForegroundColor Green
-}
-
-# Add to PATH if not already present
-function Add-ToPath {
-    $currentPath = [Environment]::GetEnvironmentVariable("Path", "User")
-    
-    if ([string]::IsNullOrEmpty($currentPath)) {
-        $currentPath = ""
-    }
-    
-    # Split PATH into components and check for exact match
-    $pathComponents = $currentPath -split ';' | Where-Object { $_ -ne '' }
-    $alreadyInPath = $pathComponents | Where-Object { $_ -eq $INSTALL_DIR }
-    
-    if (-not $alreadyInPath) {
-        Write-Host ""
-        Write-Host "Adding Labelgood to PATH..." -ForegroundColor Yellow
-        
-        # Handle semicolon separator properly
-        if ([string]::IsNullOrEmpty($currentPath)) {
-            $newPath = $INSTALL_DIR
-        }
-        elseif ($currentPath.EndsWith(";")) {
-            $newPath = "$currentPath$INSTALL_DIR"
-        }
-        else {
-            $newPath = "$currentPath;$INSTALL_DIR"
-        }
-        
-        [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
-        
-        # Update PATH for current session only if not already present
-        $sessionPathComponents = $env:Path -split ';' | Where-Object { $_ -ne '' }
-        $alreadyInSession = $sessionPathComponents | Where-Object { $_ -eq $INSTALL_DIR }
-        if (-not $alreadyInSession) {
-            $env:Path = "$env:Path;$INSTALL_DIR"
-        }
-        
-        Write-Host "✓ Added to PATH" -ForegroundColor Green
-    }
-}
-
-# Main installation flow
-function Main {
+try {
     Install-Labelgood
-    New-DesktopShortcut
-    Add-ToPath
-    
     Write-Host ""
     Write-Host "======================================" -ForegroundColor Cyan
     Write-Host "Installation complete!" -ForegroundColor Green
     Write-Host "======================================" -ForegroundColor Cyan
     Write-Host ""
-    Write-Host "To run Labelgood, type: labelgood" -ForegroundColor White
-    Write-Host "Or use the desktop shortcut" -ForegroundColor White
+    Write-Host "Start Labelgood from the Start menu or the desktop shortcut." -ForegroundColor White
+    Write-Host "Uninstall it from Settings > Apps like any other app." -ForegroundColor White
     Write-Host ""
-    Write-Host "Note: You may need to restart your terminal for PATH changes to take effect." -ForegroundColor Yellow
-    Write-Host ""
-}
-
-# Run main
-try {
-    Main
 }
 catch {
     Write-Host ""

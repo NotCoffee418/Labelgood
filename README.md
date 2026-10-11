@@ -1,44 +1,39 @@
 # Labelgood
 
-A desktop application built with Tauri + Svelte + TypeScript.
-
-⚠️ **Pre-Alpha Software** - Labelgood is currently in pre-alpha development. It theoretically works... mostly. Expect bugs and breaking changes.
+A label editor for label printers such as the Brother QL series. Design labels with text, lines, rectangles and images, then print them directly or save them as PDF. Runs on Windows and Linux.
 
 ## Installation
 
-### Quick Install (Linux)
+### Windows
 
-```bash
-curl -fsSL https://raw.githubusercontent.com/NotCoffee418/Labelgood/main/install.sh | bash
-```
+- Installer: [x64](https://github.com/NotCoffee418/Labelgood/releases/latest/download/Labelgood-setup-x64.exe) · [ARM64](https://github.com/NotCoffee418/Labelgood/releases/latest/download/Labelgood-setup-arm64.exe)
+- Or in PowerShell:
+  ```powershell
+  irm https://raw.githubusercontent.com/NotCoffee418/Labelgood/main/install.ps1 | iex
+  ```
 
-### Quick Install (Windows)
+### Linux
 
-Open PowerShell as Administrator and run:
+- Debian/Ubuntu: [x64](https://github.com/NotCoffee418/Labelgood/releases/latest/download/Labelgood-amd64.deb) · [ARM64](https://github.com/NotCoffee418/Labelgood/releases/latest/download/Labelgood-arm64.deb)
+- Fedora/openSUSE: [x64](https://github.com/NotCoffee418/Labelgood/releases/latest/download/Labelgood-amd64.rpm) · [ARM64](https://github.com/NotCoffee418/Labelgood/releases/latest/download/Labelgood-arm64.rpm)
+- AppImage: [x64](https://github.com/NotCoffee418/Labelgood/releases/latest/download/Labelgood-amd64.AppImage) · [ARM64](https://github.com/NotCoffee418/Labelgood/releases/latest/download/Labelgood-arm64.AppImage)
+- Or any distro:
+  ```bash
+  curl -fsSL https://raw.githubusercontent.com/NotCoffee418/Labelgood/main/install.sh | bash
+  ```
 
-```powershell
-irm https://raw.githubusercontent.com/NotCoffee418/Labelgood/main/install.ps1 | iex
-```
-
-### Manual Installation
-
-Download the latest release for your platform from the [releases page](https://github.com/NotCoffee418/Labelgood/releases/latest):
-
-- **Linux**: `labelgood-VERSION-linux-amd64.tar.gz`
-- **Windows**: `labelgood-VERSION-windows-amd64.zip`
-
-Extract the archive and run the binary.
+MSI, portable builds and checksums are on the [releases page](https://github.com/NotCoffee418/Labelgood/releases/latest).
 
 ## Printing
 
 Labelgood prints through the system's own printer drivers, so no extra tools are needed:
 
-- **Linux**: CUPS (`lpstat`, `lpoptions`, `lpr`). Use the permanent queue for your printer (e.g. `QL-810W`); temporary auto-discovered queues don't report their options.
 - **Windows**: any installed printer. Options such as cutting come from the driver's own settings.
+- **Linux**: CUPS. Use the permanent queue for your printer (e.g. `QL-810W`); temporary auto-discovered queues don't report their options.
 
 The print dialog shows whatever options the selected printer's driver offers (cutting, quality, media type, …) and remembers your choices per printer.
 
-## Development Setup
+## Development
 
 ### Prerequisites
 
@@ -48,55 +43,35 @@ The print dialog shows whatever options the selected printer's driver offers (cu
 
 ### Getting Started
 
-1. Install dependencies:
 ```bash
-npm install
+npm install          # install dependencies
+npm run tauri dev    # run the app in development mode
+npm run tauri build  # build the app and its installers/packages
 ```
 
-2. Run the development server:
-```bash
-npm run tauri dev
-```
+### Project Structure
 
-3. Build for production:
-```bash
-npm run build
-npm run tauri build
-```
-
-## VSCode Debug Support
-
-This project is configured for debugging with VSCode. Simply press **F5** to start debugging:
-
-- **Tauri Development Debug** - Runs the app in development mode with the debugger attached
-- **Tauri Production Debug** - Builds and runs the production version with the debugger attached
-
-## Project Structure
-
-- `src/` - Svelte frontend code
-- `src-tauri/` - Rust backend code
+- `src/` - Svelte frontend
+- `src-tauri/` - Rust backend (printing, PDF generation, fonts)
 - `static/` - Static assets
-- `.vscode/` - VSCode configuration for debugging and recommended extensions
+- `.vscode/` - Editor settings and recommended extensions
 
-## Recommended IDE Setup
-
-[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer).
+Recommended editor: [VS Code](https://code.visualstudio.com/) with the [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode), [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) and [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer) extensions.
 
 ## Release Workflow
 
-This project includes a GitHub Actions workflow that automatically builds and releases the application when you push a version tag:
+Pushing a version tag builds and publishes a release:
 
 ```bash
 git tag v1.0.0
 git push origin v1.0.0
 ```
 
-The workflow will:
-1. Run tests
-2. Build binaries for:
-   - Linux (x86_64/amd64)
-   - Windows (x86_64/amd64)
-3. Create a GitHub release with the built binaries
+Tags must be plain `vMAJOR.MINOR.PATCH`; the packages take their version from the tag.
 
-**Note:** ARM builds (arm64, armv7) are not currently supported due to cross-compilation complexity with Tauri's GUI dependencies. Users on ARM platforms can build from source.
+The workflow runs the tests, then builds with Tauri's bundler:
 
+- **Windows** (x64 and ARM64): installer, MSI and portable executable
+- **Linux** (x86_64 and ARM64): `.deb`, `.rpm`, AppImage and plain binary
+
+and creates a GitHub release for the tag with all of them. Linux ARM64 is built natively on GitHub's ARM runners; Windows ARM64 is cross-compiled on x64 Windows.

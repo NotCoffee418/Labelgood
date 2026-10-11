@@ -1,6 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "labelgood",
+  "productName": "Labelgood",
+  "mainBinaryName": "labelgood",
   "version": "0.1.0",
   "identifier": "com.labelgood.app",
   "build": {
@@ -21,7 +22,9 @@
     ],
     "security": {
       "csp": null,
-      "capabilities": ["default"]
+      "capabilities": [
+        "default"
+      ]
     }
   },
   "bundle": {
@@ -33,6 +36,12 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "category": "Utility",
+    "shortDescription": "Label editor and printer",
+    "longDescription": "Design labels for label printers such as the Brother QL series and print them directly or save them as PDF.",
+    "publisher": "Stijn Raeymaekers",
+    "homepage": "https://github.com/NotCoffee418/Labelgood",
+    "license": "MIT"
   }
 }
