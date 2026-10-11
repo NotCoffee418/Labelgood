@@ -1,6 +1,8 @@
-# Labelgood
+# ![](src-tauri/icons/32x32.png) Labelgood
 
 A label editor for label printers such as the Brother QL series. Design labels with text, lines, rectangles and images, then print them directly or save them as PDF. Runs on Windows and Linux.
+
+![Labelgood preview](images/labelgood_preview.png)
 
 ## Installation
 

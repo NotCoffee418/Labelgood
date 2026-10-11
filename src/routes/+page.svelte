@@ -1937,7 +1937,7 @@
 <div class="app-container">
   <div class="main-section">
     <header class="app-header">
-      <h1>Labelgood</h1>
+      <h1><img class="app-logo" src="/logo.svg" alt="" />Labelgood</h1>
       <div class="segmented theme-switch" role="radiogroup" aria-label="Theme">
         {#each [["system", "System"], ["light", "Light"], ["dark", "Dark"]] as [value, label]}
           <label class:active={theme === value}>
@@ -2669,9 +2669,17 @@
   }
 
   h1 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
     margin: 0;
     color: var(--text);
     font-size: 24px;
+  }
+
+  .app-logo {
+    width: 34px;
+    height: 34px;
   }
 
   .segmented {
