@@ -54,6 +54,10 @@ npm run tauri build  # build the app and its installers/packages
 ### Project Structure
 
 - `src/` - Svelte frontend
+  - `routes/+page.svelte` - the app's single page, composed from the components below
+  - `lib/components/` - UI components (toolbar, canvas, settings panel, print dialog, ...)
+  - `lib/state/` - shared state (runes in `.svelte.ts` modules) and the editor's behaviour: elements, undo, mouse gestures, keyboard shortcuts, clipboard, printing, settings
+  - `lib/` - helpers without app state: types, label formats, rich text editing, rendering for print, and typed wrappers for the Rust commands
 - `src-tauri/` - Rust backend (printing, PDF generation, fonts)
 - `static/` - Static assets
 - `.vscode/` - Editor settings and recommended extensions

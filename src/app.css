@@ -1,0 +1,230 @@
+/* Theme tokens: light by default, dark via system preference or explicit choice */
+:root {
+  color-scheme: light;
+  --bg: #f5f5f5;
+  --surface: #ffffff;
+  --surface-muted: #f0f0f0;
+  --border: #dddddd;
+  --text: #333333;
+  --text-muted: #555555;
+  --text-subtle: #777777;
+  --accent: #007bff;
+  --accent-hover: #0056b3;
+  --accent-active: #004494;
+  --accent-soft: rgba(0, 123, 255, 0.08);
+  --success: #28a745;
+  --danger: #dc3545;
+  --neutral: #6c757d;
+  --neutral-hover: #5a6268;
+  --shadow: rgba(0, 0, 0, 0.1);
+  --canvas-bg: #e8eaed;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --bg: #1b1d21;
+    --surface: #25282d;
+    --surface-muted: #2f3238;
+    --border: #3c4047;
+    --text: #e6e6e6;
+    --text-muted: #b8bcc4;
+    --text-subtle: #8b9099;
+    --accent: #3b8eff;
+    --accent-hover: #2f7ae6;
+    --accent-active: #2566c2;
+    --accent-soft: rgba(59, 142, 255, 0.15);
+    --success: #2fa84f;
+    --danger: #e5484d;
+    --neutral: #5a6069;
+    --neutral-hover: #4a4f57;
+    --shadow: rgba(0, 0, 0, 0.4);
+    --canvas-bg: #16181b;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #1b1d21;
+  --surface: #25282d;
+  --surface-muted: #2f3238;
+  --border: #3c4047;
+  --text: #e6e6e6;
+  --text-muted: #b8bcc4;
+  --text-subtle: #8b9099;
+  --accent: #3b8eff;
+  --accent-hover: #2f7ae6;
+  --accent-active: #2566c2;
+  --accent-soft: rgba(59, 142, 255, 0.15);
+  --success: #2fa84f;
+  --danger: #e5484d;
+  --neutral: #5a6069;
+  --neutral-hover: #4a4f57;
+  --shadow: rgba(0, 0, 0, 0.4);
+  --canvas-bg: #16181b;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  background-color: var(--bg);
+  color: var(--text);
+}
+
+/* Thin scrollbars that only take space when content actually overflows */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+/* ---- Controls shared by several components ---- */
+
+/* Small toolbar buttons: an icon or a short label */
+.icon-btn,
+.text-btn {
+  height: 32px;
+  border: none;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.icon-btn {
+  width: 32px;
+  font-size: 17px;
+}
+
+.text-btn {
+  padding: 0 10px;
+  font-size: 13px;
+}
+
+.icon-btn:hover:not(:disabled),
+.text-btn:hover {
+  background: var(--surface-muted);
+}
+
+.icon-btn:disabled {
+  color: var(--text-subtle);
+  opacity: 0.5;
+  cursor: default;
+}
+
+.icon-btn.danger:hover {
+  color: var(--danger);
+}
+
+/* Toolbar buttons joined into one bordered block */
+.button-group {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+/* Specific enough to outrank `border: none` on component-scoped button classes */
+.button-group > button:not(:first-child) {
+  border-left: 1px solid var(--border);
+}
+
+/* Selects and text/number fields; components set width and any padding of their own */
+.input {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 14px;
+  background-color: var(--surface);
+  color: var(--text);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  color: var(--text-muted);
+  cursor: pointer;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.checkbox-label input[type="checkbox"] {
+  cursor: pointer;
+  width: 16px;
+  height: 16px;
+  margin: 0;
+}
+
+/* Large action buttons (Save PDF, Print) */
+.secondary-button {
+  padding: 12px 20px;
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.secondary-button:hover:not(:disabled) {
+  background: var(--surface-muted);
+}
+
+.secondary-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.print-button {
+  padding: 12px 24px;
+  background-color: var(--accent);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s;
+}
+
+.print-button:hover {
+  background-color: var(--accent-hover);
+}
+
+.print-button:active {
+  background-color: var(--accent-active);
+}
+
+.print-button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+/* Result of the last print or save */
+.status {
+  margin: 0 0 10px 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--success);
+  overflow-wrap: anywhere;
+}
+
+.status.error {
+  color: var(--danger);
+  white-space: pre-line;
+}
