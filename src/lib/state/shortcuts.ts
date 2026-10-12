@@ -6,11 +6,21 @@ import { deleteSelection, editor, redo, snapshot, startEditing, stopEditing, und
 import { rotateSelection, selectAll } from './elements';
 import { moveGroup } from './geometry';
 import { refreshGestureForModifiers } from './gestures';
+import { help } from './help.svelte';
 import { closePrintDialog, openPrintDialog, output } from './output.svelte';
 
 export function handleKeyDown(event: KeyboardEvent) {
   const target = event.target as HTMLElement;
-  // The print dialog is modal
+  if (event.key === 'F1') {
+    event.preventDefault();
+    help.open = !help.open;
+    return;
+  }
+  // The dialogs are modal
+  if (help.open) {
+    if (event.key === 'Escape') help.open = false;
+    return;
+  }
   if (output.printDialog) {
     if (event.key === 'Escape') closePrintDialog();
     return;

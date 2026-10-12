@@ -151,8 +151,12 @@ function applyEndpoint(clientX: number, clientY: number, free: boolean) {
 // Pressing or releasing Shift/Ctrl mid-resize updates the preview right away
 export function refreshGestureForModifiers(event: KeyboardEvent) {
   if (!pointer.lastPointer) return;
-  if (pointer.resize) applyResize(pointer.lastPointer.x, pointer.lastPointer.y, event.shiftKey, event.ctrlKey || event.metaKey);
-  if (pointer.endpointDrag) applyEndpoint(pointer.lastPointer.x, pointer.lastPointer.y, event.shiftKey);
+  // WebKitGTK still reports a modifier as held on its own key-up, so go by the key released
+  const released = event.type === 'keyup' ? event.key : null;
+  const shift = event.shiftKey && released !== 'Shift';
+  const ctrl = (event.ctrlKey && released !== 'Control') || (event.metaKey && released !== 'Meta');
+  if (pointer.resize) applyResize(pointer.lastPointer.x, pointer.lastPointer.y, shift, ctrl);
+  if (pointer.endpointDrag) applyEndpoint(pointer.lastPointer.x, pointer.lastPointer.y, shift);
 }
 
 // ---- Continuous label length ----

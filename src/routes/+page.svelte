@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import AppHeader from '$lib/components/AppHeader.svelte';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
+  import HelpDialog from '$lib/components/HelpDialog.svelte';
   import LabelCanvas from '$lib/components/LabelCanvas.svelte';
   import PrintDialog from '$lib/components/PrintDialog.svelte';
   import SettingsPanel from '$lib/components/SettingsPanel.svelte';
@@ -12,6 +13,7 @@
   import { initSampleBox } from '$lib/state/elements';
   import { loadFonts } from '$lib/state/fonts.svelte';
   import { handleSelectionChange } from '$lib/state/formatting';
+  import { help } from '$lib/state/help.svelte';
   import { loadPrinters, output } from '$lib/state/output.svelte';
   import { applyTheme, loadSettings, persistSettings } from '$lib/state/settings.svelte';
   import { handleKeyDown, handleKeyUp } from '$lib/state/shortcuts';
@@ -55,6 +57,9 @@
 
 {#if output.printDialog}
   <PrintDialog preview={output.printDialog.preview} />
+{/if}
+{#if help.open}
+  <HelpDialog />
 {/if}
 
 <style>
