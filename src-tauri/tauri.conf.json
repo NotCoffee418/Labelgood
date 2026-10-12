@@ -16,8 +16,8 @@
         "title": "Labelgood",
         "width": 1024,
         "height": 600,
-        "minWidth": 820,
-        "minHeight": 560
+        "minWidth": 1024,
+        "minHeight": 600
       }
     ],
     "security": {
