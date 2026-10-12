@@ -39,8 +39,8 @@
 
     {#if editor.selectedIds.length > 0}
       <div class="button-group" role="group" aria-label="Rotate">
-        <button class="icon-btn" title="Rotate left (Shift+R)" aria-label="Rotate left" onclick={() => rotateSelection(-1)}>⟲</button>
-        <button class="icon-btn" title="Rotate right (R)" aria-label="Rotate right" onclick={() => rotateSelection(1)}>⟳</button>
+        <button class="icon-btn" title="Rotate left (Ctrl+Shift+R)" aria-label="Rotate left" onclick={() => rotateSelection(-1)}>⟲</button>
+        <button class="icon-btn" title="Rotate right (Ctrl+R)" aria-label="Rotate right" onclick={() => rotateSelection(1)}>⟳</button>
       </div>
 
       <button class="icon-btn danger" title="Delete (Del)" aria-label="Delete"

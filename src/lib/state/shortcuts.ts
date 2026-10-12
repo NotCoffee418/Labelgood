@@ -5,7 +5,7 @@ import { copySelection, cutSelection, duplicateSelection } from './clipboard.sve
 import { deleteSelection, editor, redo, snapshot, startEditing, stopEditing, undo } from './editor.svelte';
 import { rotateSelection, selectAll } from './elements';
 import { moveGroup } from './geometry';
-import { refreshGestureForShift } from './gestures';
+import { refreshGestureForModifiers } from './gestures';
 import { closePrintDialog, openPrintDialog, output } from './output.svelte';
 
 export function handleKeyDown(event: KeyboardEvent) {
@@ -20,8 +20,16 @@ export function handleKeyDown(event: KeyboardEvent) {
     openPrintDialog();
     return;
   }
-  if (event.key === 'Shift' && (pointer.resize || pointer.endpointDrag)) {
-    refreshGestureForShift(true);
+  // Ctrl+R rotates instead of reloading the page
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'r') {
+    event.preventDefault();
+    if (editor.selectedIds.length > 0 && editor.editingBoxId === null && !isEditableTarget(target)) {
+      rotateSelection(event.shiftKey ? -1 : 1);
+    }
+    return;
+  }
+  if ((event.key === 'Shift' || event.key === 'Control' || event.key === 'Meta') && (pointer.resize || pointer.endpointDrag)) {
+    refreshGestureForModifiers(event);
     return;
   }
 
@@ -64,17 +72,11 @@ export function handleKeyDown(event: KeyboardEvent) {
   const nudge = (dx: number, dy: number) => moveGroup(snapshot(editor.selectedElements), dx, dy);
   switch (event.key) {
     case 'Delete':
-    case 'Backspace':
       deleteSelection();
       break;
     case 'Enter':
       if (editor.selected?.kind !== 'text') return;
       startEditing(editor.selected.id);
-      break;
-    case 'r':
-    case 'R':
-      if (event.ctrlKey || event.metaKey || event.altKey) return;
-      rotateSelection(event.shiftKey ? -1 : 1);
       break;
     case 'ArrowLeft': nudge(-step, 0); break;
     case 'ArrowRight': nudge(step, 0); break;
@@ -86,5 +88,5 @@ export function handleKeyDown(event: KeyboardEvent) {
 }
 
 export function handleKeyUp(event: KeyboardEvent) {
-  if (event.key === 'Shift') refreshGestureForShift(false);
+  if (event.key === 'Shift' || event.key === 'Control' || event.key === 'Meta') refreshGestureForModifiers(event);
 }

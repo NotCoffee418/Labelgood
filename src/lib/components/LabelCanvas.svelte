@@ -20,25 +20,23 @@
     tick().then(() => label.contentLength = measureContentLength());
   });
 
-  // Mouse wheel over the label zooms; elsewhere on the canvas, or with Shift held, it
-  // scrolls vertically. Needs a non-passive listener to stop the default scroll.
+  // Ctrl+wheel (also pinch on a trackpad) zooms around the cursor. A plain wheel scrolls along
+  // whichever axis has more to scroll, Shift picks the other one. Needs a non-passive listener
+  // to stop the default scroll and the browser's own page zoom.
   function wheelZoom(node: HTMLElement) {
     const onWheel = (event: WheelEvent) => {
       canvas.contextMenu = null;
       const scale = event.deltaMode === 1 ? 33 : event.deltaMode === 2 ? node.clientHeight : 1;
-      if (event.shiftKey) {
-        // Browsers turn Shift+wheel into horizontal scrolling; scroll down/up instead
+      if (event.ctrlKey || event.metaKey) {
         event.preventDefault();
-        node.scrollTop += (event.deltaY || event.deltaX) * scale;
+        setZoom(canvas.zoom * Math.exp(-event.deltaY * scale * 0.0015), event.clientX, event.clientY);
         return;
       }
-      const labelRect = canvas.labelEl?.getBoundingClientRect();
-      const overLabel = labelRect
-        && event.clientX >= labelRect.left && event.clientX <= labelRect.right
-        && event.clientY >= labelRect.top && event.clientY <= labelRect.bottom;
-      if (!overLabel) return; // normal scrolling
+      if (event.deltaX !== 0) return; // trackpads already scroll in both directions
       event.preventDefault();
-      setZoom(canvas.zoom * Math.exp(-event.deltaY * scale * 0.0015), event.clientX, event.clientY);
+      const horizontal = (node.scrollWidth - node.clientWidth > node.scrollHeight - node.clientHeight) !== event.shiftKey;
+      if (horizontal) node.scrollLeft += event.deltaY * scale;
+      else node.scrollTop += event.deltaY * scale;
     };
     node.addEventListener('wheel', onWheel, { passive: false });
     return {

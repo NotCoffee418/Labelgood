@@ -73,8 +73,8 @@ export function startElementResize(event: MouseEvent, el: LabelElement, sx: -1 |
   };
 }
 
-// Shapes and images keep their proportions unless Shift is held; text boxes resize freely
-function applyResize(clientX: number, clientY: number, free: boolean) {
+// Resizing is free-form for every element; Shift keeps the starting proportions, Ctrl makes it square
+function applyResize(clientX: number, clientY: number, keepRatio: boolean, square: boolean) {
   if (!pointer.resize) return;
   const r = pointer.resize;
   const el = editor.elements.find(e => e.id === r.id);
@@ -90,7 +90,10 @@ function applyResize(clientX: number, clientY: number, free: boolean) {
 
   let w = r.sx ? Math.max(MIN_ELEMENT_SIZE, r.w0 + r.sx * ldx) : r.w0;
   let h = r.sy ? Math.max(MIN_ELEMENT_SIZE, r.h0 + r.sy * ldy) : r.h0;
-  if (el.kind !== 'text' && !free) {
+  if (square) {
+    const side = r.sx && r.sy ? Math.max(w, h) : r.sx ? w : h;
+    w = h = side;
+  } else if (keepRatio) {
     const scale = r.sx && r.sy ? Math.max(w / r.w0, h / r.h0) : r.sx ? w / r.w0 : h / r.h0;
     w = r.w0 * scale;
     h = r.h0 * scale;
@@ -145,11 +148,11 @@ function applyEndpoint(clientX: number, clientY: number, free: boolean) {
   }
 }
 
-// Pressing or releasing Shift mid-resize updates the preview right away
-export function refreshGestureForShift(free: boolean) {
+// Pressing or releasing Shift/Ctrl mid-resize updates the preview right away
+export function refreshGestureForModifiers(event: KeyboardEvent) {
   if (!pointer.lastPointer) return;
-  if (pointer.resize) applyResize(pointer.lastPointer.x, pointer.lastPointer.y, free);
-  if (pointer.endpointDrag) applyEndpoint(pointer.lastPointer.x, pointer.lastPointer.y, free);
+  if (pointer.resize) applyResize(pointer.lastPointer.x, pointer.lastPointer.y, event.shiftKey, event.ctrlKey || event.metaKey);
+  if (pointer.endpointDrag) applyEndpoint(pointer.lastPointer.x, pointer.lastPointer.y, event.shiftKey);
 }
 
 // ---- Continuous label length ----
@@ -247,10 +250,9 @@ export function handleContextMenu(event: MouseEvent) {
     deselect();
   }
   const rect = canvas.labelEl.getBoundingClientRect();
-  // Keep the menu on screen
   canvas.contextMenu = {
-    x: Math.min(event.clientX, window.innerWidth - 210),
-    y: Math.min(event.clientY, window.innerHeight - 330),
+    x: event.clientX,
+    y: event.clientY,
     labelX: (event.clientX - rect.left) / canvas.zoom,
     labelY: (event.clientY - rect.top) / canvas.zoom,
   };
@@ -289,7 +291,7 @@ function applyPointerMove(event: MouseEvent) {
       label.height = newDimension;
     }
   } else if (pointer.resize) {
-    applyResize(event.clientX, event.clientY, event.shiftKey);
+    applyResize(event.clientX, event.clientY, event.shiftKey, event.ctrlKey || event.metaKey);
   } else if (pointer.endpointDrag) {
     applyEndpoint(event.clientX, event.clientY, event.shiftKey);
   } else if (drag) {
@@ -311,8 +313,8 @@ export function handleMouseUp(event: MouseEvent) {
     applyPointerMove(pendingMove);
     pendingMove = null;
   }
-  // Whether Shift is held on release decides the final shape
-  if (pointer.resize) applyResize(event.clientX, event.clientY, event.shiftKey);
+  // The modifiers held on release decide the final shape
+  if (pointer.resize) applyResize(event.clientX, event.clientY, event.shiftKey, event.ctrlKey || event.metaKey);
   if (pointer.endpointDrag) applyEndpoint(event.clientX, event.clientY, event.shiftKey);
   const { clickThrough, drag, dragOffset } = pointer;
   const isClick = clickThrough !== null && Math.hypot(event.clientX - clickThrough.x, event.clientY - clickThrough.y) < 3;

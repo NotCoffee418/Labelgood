@@ -15,6 +15,12 @@
     commit();
   }
 
+  // The menu's own size, so it can be kept fully on screen whatever it contains
+  let windowWidth = $state(0);
+  let windowHeight = $state(0);
+  let menuWidth = $state(0);
+  let menuHeight = $state(0);
+
   // Clicking anywhere else closes the menu
   function handleWindowMouseDown(event: MouseEvent) {
     if (canvas.contextMenu && !(event.target as HTMLElement).closest('.context-menu')) {
@@ -23,12 +29,15 @@
   }
 </script>
 
-<svelte:window onmousedown={handleWindowMouseDown} />
+<svelte:window onmousedown={handleWindowMouseDown} bind:innerWidth={windowWidth} bind:innerHeight={windowHeight} />
 
 {#if canvas.contextMenu}
   {@const hasSelection = editor.selectedIds.length > 0}
   {@const onlyText = editor.selectedTexts.length > 0 && editor.selectedTexts.length === editor.selectedIds.length}
-  <div class="context-menu" role="menu" style:left="{canvas.contextMenu.x}px" style:top="{canvas.contextMenu.y}px">
+  <div class="context-menu" role="menu"
+    bind:clientWidth={menuWidth} bind:clientHeight={menuHeight}
+    style:left="{Math.max(0, Math.min(canvas.contextMenu.x, windowWidth - menuWidth))}px"
+    style:top="{Math.max(0, Math.min(canvas.contextMenu.y, windowHeight - menuHeight))}px">
     <button role="menuitem" disabled={!hasSelection} onclick={() => menuAction(cutSelection)}>Cut<span>Ctrl+X</span></button>
     <button role="menuitem" disabled={!hasSelection} onclick={() => menuAction(copySelection)}>
       {onlyText ? 'Copy text' : 'Copy'}<span>Ctrl+C</span>
@@ -38,8 +47,8 @@
     <button role="menuitem" disabled={!hasSelection} onclick={() => menuAction(deleteSelection)}>Delete<span>Del</span></button>
     {#if hasSelection}
       <hr />
-      <button role="menuitem" onclick={() => menuAction(() => rotateSelection(-1))}>Rotate left<span>Shift+R</span></button>
-      <button role="menuitem" onclick={() => menuAction(() => rotateSelection(1))}>Rotate right<span>R</span></button>
+      <button role="menuitem" onclick={() => menuAction(() => rotateSelection(-1))}>Rotate left<span>Ctrl+Shift+R</span></button>
+      <button role="menuitem" onclick={() => menuAction(() => rotateSelection(1))}>Rotate right<span>Ctrl+R</span></button>
     {/if}
     <hr />
     <button role="menuitem" disabled={!hasSelection} onclick={() => menuAction(bringToFront)}>Bring to front</button>
