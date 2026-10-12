@@ -1,0 +1,37 @@
+name: Printer report
+description: Report whether a printer works with Labelgood, so it can be added to SUPPORTED_DEVICES.md
+title: "Printer report: "
+labels: ["printer-report"]
+body:
+  - type: input
+    id: printer
+    attributes:
+      label: Printer model
+      placeholder: e.g. Brother QL-820NWB
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - Windows
+        - Linux
+    validations:
+      required: true
+  - type: dropdown
+    id: result
+    attributes:
+      label: Did it work?
+      options:
+        - Yes, printed fine
+        - No, had an issue
+    validations:
+      required: true
+  - type: textarea
+    id: details
+    attributes:
+      label: Details
+      description: What you printed (label size, continuous or die-cut), and if it failed, what happened (error message, printer behavior, driver used).
+    validations:
+      required: false

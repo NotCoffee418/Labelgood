@@ -35,6 +35,18 @@ Labelgood prints through the system's own printer drivers, so no extra tools are
 
 The print dialog shows whatever options the selected printer's driver offers (cutting, quality, media type, …) and remembers your choices per printer.
 
+### Supported Devices
+
+#### Confirmed Working
+
+- Brother QL-810W (Windows, Linux)
+
+#### Expected to Work
+
+- Any label printer with a CUPS driver, on Linux
+
+See [SUPPORTED_DEVICES.md](SUPPORTED_DEVICES.md) for details, and to report a printer that isn't listed.
+
 ## Development
 
 ### Prerequisites

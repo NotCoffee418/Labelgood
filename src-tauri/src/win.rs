@@ -5,7 +5,7 @@
 //! of CUPS' `lpoptions`), so whatever the driver offers (e.g. Brother's cut settings)
 //! shows up in the print dialog. See `print_schema` for reading and writing that XML.
 
-use crate::print_schema::{delta_ticket, parse_capabilities, ticket_selections};
+use crate::print_schema::{delta_ticket, matching_media_size, parse_capabilities, ticket_selections, PSK};
 use crate::{pdf::RgbImage, DefaultFonts, PrintJob, PrinterOption};
 use std::collections::BTreeSet;
 use windows::core::{w, BOOL, HSTRING, PCWSTR};
@@ -173,15 +173,20 @@ fn devmode_to_ticket(provider: &Provider, devmode: &DevMode) -> Result<IStream, 
     Ok(stream)
 }
 
-pub fn printer_options(printer: &str) -> Result<Vec<PrinterOption>, String> {
-    init_com();
-    let provider = Provider::open(printer)?;
+/// The driver's PrintCapabilities as XML (the Windows counterpart of CUPS' `lpoptions -l`)
+fn capabilities_xml(provider: &Provider) -> Result<String, String> {
     let capabilities = new_stream()?;
     unsafe {
         PTGetPrintCapabilities(provider.0, None::<&IStream>, &capabilities, None)
             .map_err(|e| err("Couldn't read the printer's capabilities", e))?;
     }
-    let xml = String::from_utf8_lossy(&read_stream(&capabilities)?).into_owned();
+    Ok(String::from_utf8_lossy(&read_stream(&capabilities)?).into_owned())
+}
+
+pub fn printer_options(printer: &str) -> Result<Vec<PrinterOption>, String> {
+    init_com();
+    let provider = Provider::open(printer)?;
+    let xml = capabilities_xml(&provider)?;
 
     // Current defaults, so each option starts at what the driver would use anyway
     let defaults = default_devmode(printer)
@@ -294,9 +299,19 @@ pub fn print(job: &PrintJob) -> Result<(), String> {
     init_com();
     let provider = Provider::open(job.printer)?;
 
+    // Prefer the driver's own named media (e.g. a Brother DK roll) over an arbitrary
+    // custom size: some drivers handle a size they didn't themselves advertise
+    // inconsistently, down to rejecting the job at the printer with a feed error.
+    let media = capabilities_xml(&provider).ok().and_then(|xml| matching_media_size(&xml, job.width_mm, job.height_mm));
+
+    let mut options = job.options.clone();
+    if let Some(media) = &media {
+        options.insert(format!("{}|{}", PSK, "PageMediaSize"), media.clone());
+    }
+
     // Start from the printer's defaults and apply the chosen options on top
     let base = devmode_to_ticket(&provider, &default_devmode(job.printer)?)?;
-    let delta = stream_with(delta_ticket(job.options).as_bytes())?;
+    let delta = stream_with(delta_ticket(&options).as_bytes())?;
     let merged = new_stream()?;
     unsafe {
         PTMergeAndValidatePrintTicket(provider.0, &base, &delta, kPTJobScope, &merged, None)
@@ -309,14 +324,21 @@ pub fn print(job: &PrintJob) -> Result<(), String> {
             .map_err(|e| err("Couldn't apply the print settings", e))?;
         let devmode = devmode as *mut DEVMODEW;
 
-        // Paper size from the label (in 0.1 mm), portrait, and the number of copies
-        (*devmode).dmFields |= DM_PAPERSIZE | DM_PAPERWIDTH | DM_PAPERLENGTH | DM_ORIENTATION | DM_COPIES;
+        // Portrait, the number of copies, and the label's own size (in 0.1 mm) always
+        // come from the job: selecting a named media fixes the paper size driver-side
+        // (so the printer gets the roll it expects), but the driver doesn't reliably
+        // carry that media's width/length back into the DEVMODE, so those still need
+        // to be set here, same as for the custom-size fallback below.
+        (*devmode).dmFields |= DM_ORIENTATION | DM_COPIES | DM_PAPERWIDTH | DM_PAPERLENGTH;
         let page = &mut (*devmode).Anonymous1.Anonymous1;
-        page.dmPaperSize = DMPAPER_USER as i16;
-        page.dmPaperWidth = (job.width_mm * 10.0).round() as i16;
-        page.dmPaperLength = (job.height_mm * 10.0).round() as i16;
         page.dmOrientation = DMORIENT_PORTRAIT as i16;
         page.dmCopies = job.copies as i16;
+        page.dmPaperWidth = (job.width_mm * 10.0).round() as i16;
+        page.dmPaperLength = (job.height_mm * 10.0).round() as i16;
+        if media.is_none() {
+            (*devmode).dmFields |= DM_PAPERSIZE;
+            page.dmPaperSize = DMPAPER_USER as i16;
+        }
 
         let result = draw_label(job, devmode);
         let _ = PTReleaseMemory(devmode as *const _);

@@ -9,7 +9,7 @@ use crate::PrinterOption;
 use std::collections::HashMap;
 
 const PSF: &str = "http://schemas.microsoft.com/windows/2003/08/printing/printschemaframework";
-const PSK: &str = "http://schemas.microsoft.com/windows/2003/08/printing/printschemakeywords";
+pub const PSK: &str = "http://schemas.microsoft.com/windows/2003/08/printing/printschemakeywords";
 
 /// Standard features the app controls itself (the label sets the size and orientation,
 /// copies have their own field, and the label must never be scaled or tiled)
@@ -104,6 +104,49 @@ pub fn parse_capabilities(xml: &str, defaults: &HashMap<String, String>) -> Resu
     Ok(options)
 }
 
+/// A `psf:ScoredProperty` value under `node`, in thousandths of a millimetre
+fn scored_property_mm(node: roxmltree::Node, uri: &str, local: &str) -> Option<f64> {
+    let property = node.children().filter(|child| child.has_tag_name((PSF, "ScoredProperty"))).find(|property| {
+        property.attribute("name").and_then(|name| expand_qname(*property, name)).is_some_and(|(u, l)| u == uri && l == local)
+    })?;
+    let value = property.children().find(|child| child.has_tag_name((PSF, "Value")))?.text()?;
+    Some(value.trim().parse::<f64>().ok()? / 1000.0)
+}
+
+/// Finds the driver's named `PageMediaSize` option matching a label's size, so the
+/// printer gets its own exact media (and any metadata tied to it, like feed offsets)
+/// instead of a generic custom size it may not handle the same way.
+///
+/// A continuous roll only constrains width (its `PageMediaSize` option has no height);
+/// a die-cut label's option has both, which must match within rounding.
+pub fn matching_media_size(xml: &str, width_mm: f64, height_mm: f64) -> Option<String> {
+    const TOLERANCE_MM: f64 = 0.5;
+    let doc = roxmltree::Document::parse(xml).ok()?;
+    let feature = doc
+        .root_element()
+        .children()
+        .filter(|node| node.has_tag_name((PSF, "Feature")))
+        .find(|feature| {
+            feature.attribute("name").and_then(|name| expand_qname(*feature, name)).is_some_and(|(u, l)| u == PSK && l == "PageMediaSize")
+        })?;
+
+    feature
+        .children()
+        .filter(|node| node.has_tag_name((PSF, "Option")))
+        .find(|option| {
+            let Some(width) = scored_property_mm(*option, PSK, "MediaSizeWidth") else { return false };
+            if (width - width_mm).abs() > TOLERANCE_MM {
+                return false;
+            }
+            match scored_property_mm(*option, PSK, "MediaSizeHeight") {
+                Some(height) => (height - height_mm).abs() <= TOLERANCE_MM,
+                None => true, // continuous roll: width is all that's fixed
+            }
+        })
+        .and_then(|option| option.attribute("name").and_then(|name| expand_qname(option, name)))
+        .map(|(uri, local)| option_key(&uri, &local))
+}
+
 fn escape_xml(text: &str) -> String {
     text.replace('&', "&amp;").replace('<', "&lt;").replace('"', "&quot;")
 }
@@ -174,5 +217,45 @@ mod tests {
         let options = HashMap::from([(option_key(brother, "CutOption"), option_key(brother, "CutAtEnd"))]);
         let selections = ticket_selections(&delta_ticket(&options));
         assert_eq!(selections, options);
+    }
+
+    // Shaped like a real Brother QL driver dump: die-cut options carry both a width
+    // and a height (plus a feed offset the app doesn't need), continuous-roll options
+    // carry only a width.
+    const MEDIA_SIZES: &str = r#"<?xml version="1.0"?>
+<psf:PrintCapabilities xmlns:psf="http://schemas.microsoft.com/windows/2003/08/printing/printschemaframework"
+    xmlns:psk="http://schemas.microsoft.com/windows/2003/08/printing/printschemakeywords"
+    xmlns:brpsk="http://schemas.brother.info/mfc/printing/2006/11/printschemakeywords" version="1">
+  <psf:Feature name="psk:PageMediaSize">
+    <psf:Option name="brpsk:CustomMediaSize271">
+      <psf:ScoredProperty name="psk:MediaSizeWidth"><psf:Value>29000</psf:Value></psf:ScoredProperty>
+      <psf:ScoredProperty name="psk:MediaSizeHeight"><psf:Value>89800</psf:Value></psf:ScoredProperty>
+      <psf:ScoredProperty name="brpsk:MediaSizeHeightOffset"><psf:Value>3000</psf:Value></psf:ScoredProperty>
+    </psf:Option>
+    <psf:Option name="brpsk:CustomMediaSize259">
+      <psf:ScoredProperty name="psk:MediaSizeWidth"><psf:Value>62000</psf:Value></psf:ScoredProperty>
+    </psf:Option>
+  </psf:Feature>
+</psf:PrintCapabilities>"#;
+
+    #[test]
+    fn matches_die_cut_media_by_width_and_height() {
+        let brother = "http://schemas.brother.info/mfc/printing/2006/11/printschemakeywords";
+        // The nominal label is 29x90mm; the driver's matching preset is 89.8mm tall
+        let found = matching_media_size(MEDIA_SIZES, 29.0, 90.0);
+        assert_eq!(found, Some(option_key(brother, "CustomMediaSize271")));
+    }
+
+    #[test]
+    fn matches_continuous_roll_by_width_only() {
+        let brother = "http://schemas.brother.info/mfc/printing/2006/11/printschemakeywords";
+        // Continuous rolls have no fixed height; any length should match the 62mm width
+        let found = matching_media_size(MEDIA_SIZES, 62.0, 240.0);
+        assert_eq!(found, Some(option_key(brother, "CustomMediaSize259")));
+    }
+
+    #[test]
+    fn no_match_for_unknown_size() {
+        assert_eq!(matching_media_size(MEDIA_SIZES, 40.0, 40.0), None);
     }
 }
