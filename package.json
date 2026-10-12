@@ -1,7 +1,7 @@
 {
   "name": "labelgood",
   "version": "0.1.0",
-  "description": "",
+  "description": "Label editor and printer",
   "type": "module",
   "scripts": {
     "dev": "vite dev",

@@ -270,7 +270,6 @@
   }
 
   :global(.label-preview.capturing) .element {
-    outline: none;
     opacity: 1;
   }
 
