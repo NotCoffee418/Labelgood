@@ -1,7 +1,7 @@
 // The open label file: new, open, save, and keeping unsaved changes from being lost.
 //
 // A .labelgood file is JSON:
-//   { format: "labelgood", version, label: { size, orientation, margins },
+//   { format: "labelgood", version: FILE_VERSION, label: { size, orientation, margins },
 //     elements: [...], images: { [imageId]: { src (data URL), width, height } } }
 // Element positions and sizes are px (96 per inch) on the label as displayed, as in the editor.
 import { dirname, join } from '@tauri-apps/api/path';
@@ -14,6 +14,22 @@ import { label } from './label.svelte';
 import { status } from './status.svelte';
 
 const FILE_FORMAT = 'labelgood';
+
+// Version of the file format this app writes, saved in every file as `version`.
+//
+// Files with a higher version than this are refused (see loadFile): they come from a
+// newer Labelgood, and reading them here could silently lose or misplace things, and
+// saving would then overwrite the newer file with the damage.
+//
+// When to raise it: when a change means an older Labelgood would misread files written
+// by this one, e.g. a field changes meaning or unit, or there's a new element kind or
+// setting that changes how the label prints. Purely additive fields that older versions
+// can safely ignore don't need a new version.
+//
+// When raising it, keep reading every older version: upgrade older files to the
+// current shape in loadFile, right after the version check.
+//
+// Still version 1: everything so far is part of the first format.
 const FILE_VERSION = 1;
 const EXTENSION = 'labelgood';
 const FILTERS = [{ name: 'Labelgood label', extensions: [EXTENSION] }];
@@ -73,9 +89,18 @@ function loadFile(text: string) {
   if (file?.format !== FILE_FORMAT || !Array.isArray(file.elements)) {
     throw new Error("This isn't a Labelgood label file.");
   }
-  if (typeof file.version !== 'number' || file.version > FILE_VERSION) {
-    throw new Error('This label was saved by a newer version of Labelgood. Update Labelgood to open it.');
+  // Every file has a whole-number format version from 1 up (see FILE_VERSION)
+  if (!Number.isInteger(file.version) || file.version < 1) {
+    throw new Error('This label file is damaged: it has no valid format version.');
   }
+  // A newer format can't be read safely by this app: refuse rather than guess
+  if (file.version > FILE_VERSION) {
+    throw new Error(
+      `This label was saved by a newer version of Labelgood (file format ${file.version}; ` +
+      `this version reads up to ${FILE_VERSION}). Update Labelgood to open it.`
+    );
+  }
+  // Upgrades from older format versions go here, once there are any
   const fileImages: Record<string, ImageInfo> = file.images ?? {};
   const elements = (file.elements as LabelElement[]).filter(el =>
     ELEMENT_KINDS.includes(el?.kind) && (el.kind !== 'image' || fileImages[el.imageId]?.src)
