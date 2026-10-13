@@ -7,7 +7,7 @@
 import { dirname, join } from '@tauri-apps/api/path';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { message, open, save } from '@tauri-apps/plugin-dialog';
-import { openDocument, saveDocument } from '$lib/commands';
+import { openDocument, openedFile, saveDocument } from '$lib/commands';
 import type { LabelElement } from '$lib/types';
 import { editor, images, replaceDocument } from './editor.svelte';
 import { label } from './label.svelte';
@@ -137,9 +137,10 @@ export async function saveLabelAs(): Promise<boolean> {
   return writeTo(path);
 }
 
-export async function openLabel() {
+// Opens a label: `path`, or a file the user picks
+export async function openLabel(path?: string) {
   if (!(await settleUnsavedChanges())) return;
-  const path = await open({ multiple: false, directory: false, filters: FILTERS, defaultPath: labelDocument.lastDir ?? undefined });
+  path ??= await open({ multiple: false, directory: false, filters: FILTERS, defaultPath: labelDocument.lastDir ?? undefined }) ?? undefined;
   if (typeof path !== 'string') return; // cancelled
   try {
     loadFile(await openDocument(path));
@@ -151,6 +152,14 @@ export async function openLabel() {
   labelDocument.savedJson = editor.documentJson;
   labelDocument.lastDir = await dirname(path);
   status.message = null;
+}
+
+// Opens the file the app was started with (double-clicked or "Open with"), if any
+export async function openStartupFile() {
+  try {
+    const path = await openedFile();
+    if (path) await openLabel(path);
+  } catch {} // not running in Tauri
 }
 
 // An empty label, keeping the current label size, orientation and margins

@@ -45,15 +45,28 @@
     "publisher": "Stijn Raeymaekers",
     "homepage": "https://github.com/NotCoffee418/Labelgood",
     "license": "MIT",
+    "fileAssociations": [
+      {
+        "ext": ["labelgood"],
+        "name": "Labelgood label",
+        "description": "Labelgood label",
+        "mimeType": "application/x-labelgood",
+        "role": "Editor"
+      }
+    ],
     "linux": {
       "deb": {
+        "desktopTemplate": "linux/labelgood.desktop",
         "files": {
-          "/usr/share/metainfo/com.labelgood.app.metainfo.xml": "linux/com.labelgood.app.metainfo.xml"
+          "/usr/share/metainfo/com.labelgood.app.metainfo.xml": "linux/com.labelgood.app.metainfo.xml",
+          "/usr/share/mime/packages/com.labelgood.app.xml": "linux/com.labelgood.app.mime.xml"
         }
       },
       "rpm": {
+        "desktopTemplate": "linux/labelgood.desktop",
         "files": {
-          "/usr/share/metainfo/com.labelgood.app.metainfo.xml": "linux/com.labelgood.app.metainfo.xml"
+          "/usr/share/metainfo/com.labelgood.app.metainfo.xml": "linux/com.labelgood.app.metainfo.xml",
+          "/usr/share/mime/packages/com.labelgood.app.xml": "linux/com.labelgood.app.mime.xml"
         }
       },
       "appimage": {

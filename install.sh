@@ -11,6 +11,7 @@ REPO="NotCoffee418/Labelgood"
 INSTALL_DIR="${HOME}/.local/bin"
 DESKTOP_DIR="${HOME}/.local/share/applications"
 ICON_DIR="${HOME}/.local/share/icons/hicolor/256x256/apps"
+MIME_DIR="${HOME}/.local/share/mime"
 
 # Colors for output
 RED='\033[0;31m'
@@ -154,11 +155,12 @@ Version=1.0
 Type=Application
 Name=Labelgood
 Comment=Label editor and printer
-Exec=${INSTALL_DIR}/labelgood
+Exec=${INSTALL_DIR}/labelgood %f
 Icon=labelgood
 StartupWMClass=labelgood
 Terminal=false
 Categories=Utility;
+MimeType=application/x-labelgood;
 EOF
     
     chmod +x "${DESKTOP_DIR}/labelgood.desktop"
@@ -169,6 +171,30 @@ EOF
     fi
     
     echo -e "${GREEN}✓ Desktop shortcut created${NC}"
+}
+
+# Register the .labelgood file type, so label files open in Labelgood
+register_file_type() {
+    mkdir -p "${MIME_DIR}/packages"
+    cat > "${MIME_DIR}/packages/com.labelgood.app.xml" << EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-labelgood">
+    <comment>Labelgood label</comment>
+    <sub-class-of type="application/json"/>
+    <glob pattern="*.labelgood"/>
+    <icon name="labelgood"/>
+  </mime-type>
+</mime-info>
+EOF
+
+    if command -v update-mime-database &> /dev/null; then
+        update-mime-database "$MIME_DIR" 2>/dev/null || true
+    fi
+    if command -v xdg-mime &> /dev/null; then
+        xdg-mime default labelgood.desktop application/x-labelgood 2>/dev/null || true
+    fi
+    echo -e "${GREEN}✓ .labelgood files open with Labelgood${NC}"
 }
 
 # The binary uses the system's WebKitGTK and GTK; tell the user what to install if they're missing
@@ -214,6 +240,7 @@ main() {
     check_requirements
     install_labelgood
     create_desktop_shortcut
+    register_file_type
     check_runtime_libraries
     
     echo ""

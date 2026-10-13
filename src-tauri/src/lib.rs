@@ -1,7 +1,8 @@
 use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use tauri_plugin_window_state::StateFlags;
 
 mod pdf;
@@ -155,6 +156,22 @@ async fn save_document(path: String, contents: String) -> Result<(), String> {
         })
 }
 
+/// The label file the app was started with ("Open with", or double-clicking a
+/// .labelgood file), as an absolute path. Given out once, so a reload doesn't reopen it.
+#[tauri::command]
+fn opened_file() -> Option<String> {
+    static TAKEN: AtomicBool = AtomicBool::new(false);
+    if TAKEN.swap(true, Ordering::SeqCst) {
+        return None;
+    }
+    std::env::args_os()
+        .skip(1)
+        .map(PathBuf::from)
+        .find(|path| path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case(DOCUMENT_EXTENSION)))
+        .and_then(|path| std::path::absolute(path).ok())
+        .map(|path| path.to_string_lossy().into_owned())
+}
+
 #[tauri::command]
 async fn open_document(path: String) -> Result<String, String> {
     std::fs::read_to_string(document_path(&path)?).map_err(|e| format!("Failed to open {}: {}", path, e))
@@ -187,7 +204,8 @@ pub fn run() {
             list_fonts,
             default_fonts,
             save_document,
-            open_document
+            open_document,
+            opened_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

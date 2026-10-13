@@ -9,7 +9,7 @@
   import Toolbar from '$lib/components/Toolbar.svelte';
   import { isEditableTarget } from '$lib/dom';
   import { handleDocumentPaste } from '$lib/state/clipboard.svelte';
-  import { markStartingDocument, trackDocumentWindow } from '$lib/state/document.svelte';
+  import { markStartingDocument, openStartupFile, trackDocumentWindow } from '$lib/state/document.svelte';
   import { history } from '$lib/state/editor.svelte';
   import { initSampleBox } from '$lib/state/elements';
   import { loadFonts } from '$lib/state/fonts.svelte';
@@ -33,6 +33,7 @@
   onMount(() => {
     loadPrinters();
     loadFonts();
+    openStartupFile();
   });
 
   // Block the webview's own context menu outside text fields

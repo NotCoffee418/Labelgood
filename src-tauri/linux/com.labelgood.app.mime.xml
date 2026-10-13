@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- The .labelgood file type, so file managers open labels with Labelgood -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-labelgood">
+    <comment>Labelgood label</comment>
+    <sub-class-of type="application/json"/>
+    <glob pattern="*.labelgood"/>
+    <icon name="labelgood"/>
+  </mime-type>
+</mime-info>

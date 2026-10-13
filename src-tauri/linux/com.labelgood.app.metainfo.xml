@@ -23,6 +23,7 @@
   <launchable type="desktop-id">Labelgood.desktop</launchable>
   <provides>
     <binary>labelgood</binary>
+    <mediatype>application/x-labelgood</mediatype>
   </provides>
   <url type="homepage">https://github.com/NotCoffee418/Labelgood</url>
   <url type="bugtracker">https://github.com/NotCoffee418/Labelgood/issues</url>

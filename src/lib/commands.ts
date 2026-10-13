@@ -27,6 +27,8 @@ export type PdfOptions = {
 // Label files (.labelgood): the document as JSON
 export const saveDocument = (path: string, contents: string) => invoke<void>('save_document', { path, contents });
 export const openDocument = (path: string) => invoke<string>('open_document', { path });
+// The label file the app was started with, if any (only reported once)
+export const openedFile = () => invoke<string | null>('opened_file');
 
 // Prints the label or saves it as a PDF; resolves to a message for the user
 export const generatePdf = (options: PdfOptions) => invoke<string>('generate_pdf', { options });
