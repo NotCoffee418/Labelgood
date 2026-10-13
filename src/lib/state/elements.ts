@@ -64,6 +64,11 @@ export function readImageFile(file: File, at?: Point) {
   const reader = new FileReader();
   reader.onload = () => {
     const src = reader.result as string;
+    // Only image data is kept (opening a label checks the same)
+    if (!src.startsWith('data:image/')) {
+      status.message = { text: `Couldn't read ${file.name} as an image.`, error: true };
+      return;
+    }
     const img = new Image();
     img.onload = () => insertImage(src, img.naturalWidth, img.naturalHeight, at);
     img.onerror = () => status.message = { text: `Couldn't read ${file.name} as an image.`, error: true };

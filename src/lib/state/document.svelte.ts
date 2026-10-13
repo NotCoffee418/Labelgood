@@ -8,7 +8,8 @@ import { dirname, join } from '@tauri-apps/api/path';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { message, open, save } from '@tauri-apps/plugin-dialog';
 import { openDocument, openedFile, saveDocument } from '#lib/commands.ts';
-import type { LabelElement } from '#lib/types.ts';
+import { sanitizeHtml } from '#lib/richtext.ts';
+import type { LabelElement, TextStyle } from '#lib/types.ts';
 import { editor, images, replaceDocument } from './editor.svelte';
 import { label } from './label.svelte';
 import { status } from './status.svelte';
@@ -37,6 +38,7 @@ const EXTENSION = 'labelgood';
 const FILTERS = [{ name: 'Labelgood label', extensions: [EXTENSION] }];
 const ORIENTATIONS = ['landscape', 'portrait'];
 const MARGIN_MODES = ['default', 'none', 'custom'];
+const ALIGNS = ['left', 'center', 'right'];
 const MAX_RECENT = 8;
 const AUTO_SAVE_DELAY = 2000; // ms after the last change
 
@@ -132,7 +134,9 @@ function loadFile(text: string) {
 
   const fileImages: Record<string, ImageInfo> = {};
   for (const [id, info] of Object.entries(file.images ?? {}) as [string, ImageInfo][]) {
-    if (typeof info?.src === 'string' && isNumber(info.width) && isNumber(info.height)) fileImages[id] = info;
+    if (isImageSource(info?.src) && isNumber(info.width) && isNumber(info.height)) {
+      fileImages[id] = { src: info.src, width: info.width, height: info.height };
+    }
   }
   const elements = readElements(file.elements, fileImages);
   for (const [id, info] of Object.entries(fileImages)) images.set(id, info);
@@ -159,6 +163,28 @@ function loadFile(text: string) {
 }
 
 const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+// Colors are only ever hex, from the color pickers. Anything else could be CSS that loads
+// something (e.g. a url() where a fill color goes).
+const isColor = (value: unknown): value is string => typeof value === 'string' && /^#([0-9a-f]{3}|[0-9a-f]{6}|[0-9a-f]{8})$/i.test(value);
+// Images are stored inline as data URLs. Anything else (a web or file address) would make
+// opening the label fetch or read something.
+const isImageSource = (value: unknown): value is string => typeof value === 'string' && /^data:image\/[\w.+-]+[;,]/i.test(value);
+
+// A text box's formatting, each setting checked, falling back to the defaults
+function readTextStyle(raw: any): TextStyle {
+  const s = raw && typeof raw === 'object' ? raw : {};
+  const d = editor.defaultStyle;
+  const flag = (value: unknown, fallback: boolean) => typeof value === 'boolean' ? value : fallback;
+  return {
+    fontFamily: typeof s.fontFamily === 'string' ? s.fontFamily : d.fontFamily,
+    fontSize: isNumber(s.fontSize) && s.fontSize > 0 ? s.fontSize : d.fontSize,
+    color: isColor(s.color) ? s.color : d.color,
+    bold: flag(s.bold, d.bold),
+    italic: flag(s.italic, d.italic),
+    underline: flag(s.underline, d.underline),
+    align: ALIGNS.includes(s.align) ? s.align : d.align,
+  };
+}
 
 // A file's elements, checked enough that a damaged or hand-edited file can't break the
 // editor: incomplete elements are left out, missing styles fall back to the defaults, and
@@ -177,14 +203,14 @@ function readElements(raw: unknown[], fileImages: Record<string, ImageInfo>): La
         if (!placed || typeof el.html !== 'string') continue;
         elements.push({
           kind: 'text', id, x: el.x, y: el.y, w: isNumber(el.w) ? el.w : null, h: isNumber(el.h) ? el.h : null,
-          html: el.html, style: { ...editor.defaultStyle, ...(typeof el.style === 'object' ? el.style : {}) }, ...rotation,
+          html: sanitizeHtml(el.html), style: readTextStyle(el.style), ...rotation,
         });
         break;
       case 'rect':
         if (!placed || !sized) continue;
         elements.push({
           kind: 'rect', id, x: el.x, y: el.y, w: el.w, h: el.h,
-          stroke: isNumber(el.stroke) ? el.stroke : stroke, color: typeof el.color === 'string' ? el.color : color,
+          stroke: isNumber(el.stroke) ? el.stroke : stroke, color: isColor(el.color) ? el.color : color,
           fill: typeof el.fill === 'boolean' ? el.fill : fill,
         });
         break;
@@ -196,7 +222,7 @@ function readElements(raw: unknown[], fileImages: Record<string, ImageInfo>): La
         if (![el.x1, el.y1, el.x2, el.y2].every(isNumber)) continue;
         elements.push({
           kind: 'line', id, x1: el.x1, y1: el.y1, x2: el.x2, y2: el.y2,
-          stroke: isNumber(el.stroke) ? el.stroke : stroke, color: typeof el.color === 'string' ? el.color : color,
+          stroke: isNumber(el.stroke) ? el.stroke : stroke, color: isColor(el.color) ? el.color : color,
         });
         break;
     }

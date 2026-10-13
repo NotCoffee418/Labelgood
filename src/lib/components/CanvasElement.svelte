@@ -3,7 +3,7 @@
   import { BOX_INSET, PX_PER_MM } from '#lib/constants.ts';
   import { cssFontFamily } from '#lib/fonts.ts';
   import { clampLength } from '#lib/formats.ts';
-  import { pastePlainText } from '#lib/richtext.ts';
+  import { dropPlainText, endTextDrag, pastePlainText, startTextDrag } from '#lib/richtext.ts';
   import { canvas, pointer } from '#lib/state/canvas.svelte.ts';
   import { editor, images, registerEditor, registerNode, updateTextHtml } from '#lib/state/editor.svelte.ts';
   import { rotationOf } from '#lib/state/geometry.ts';
@@ -112,8 +112,11 @@
         style:text-align={el.style.align}
         style:white-space="pre-wrap"
         use:registerEditor={el}
-        oninput={(e) => updateTextHtml(el, e.currentTarget.innerHTML)}
+        oninput={(e) => updateTextHtml(el, e.currentTarget)}
         onpaste={pastePlainText}
+        ondragstart={startTextDrag}
+        ondragend={endTextDrag}
+        ondrop={dropPlainText}
       ></div>
     {:else if el.kind === 'rect'}
       <div

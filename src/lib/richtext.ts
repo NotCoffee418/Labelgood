@@ -120,6 +120,112 @@ export function pastePlainText(event: ClipboardEvent) {
   document.execCommand('insertText', false, text);
 }
 
+// Text dragged around inside a text box keeps the browser's own move; anything dragged in
+// from elsewhere goes in as plain text at the drop point, like a paste
+let draggingInsideBox = false;
+
+export function startTextDrag() {
+  draggingInsideBox = true;
+}
+
+export function endTextDrag() {
+  draggingInsideBox = false;
+}
+
+export function dropPlainText(event: DragEvent) {
+  if (draggingInsideBox) return;
+  event.preventDefault();
+  const text = event.dataTransfer?.getData('text/plain') ?? '';
+  const range = caretRangeAt(event.clientX, event.clientY);
+  if (!text || !range) return;
+  const sel = document.getSelection()!;
+  sel.removeAllRanges();
+  sel.addRange(range);
+  document.execCommand('insertText', false, text);
+}
+
+// ---- Sanitizing ----
+// Text box HTML comes from label files (possibly someone else's) and from what the browser
+// inserts while editing. Only the markup the editor itself makes is kept: formatting tags
+// and the style properties the formatting controls set. Everything else is dropped, so a
+// label can't carry scripts, event handlers, links, images or anything that loads.
+
+const HTML_NAMESPACE = 'http://www.w3.org/1999/xhtml';
+// What execCommand produces, plus the line wrappers contenteditable inserts
+const ALLOWED_TAGS = new Set(['b', 'strong', 'i', 'em', 'u', 'span', 'font', 'div', 'p', 'br']);
+// Removed with their content, which isn't text meant for the label
+const DROPPED_TAGS = new Set([
+  'script', 'style', 'template', 'noscript', 'iframe', 'frame', 'frameset', 'object', 'embed',
+  'img', 'picture', 'video', 'audio', 'source', 'track', 'canvas', 'map', 'area', 'link', 'meta',
+  'base', 'head', 'title', 'input', 'textarea', 'select', 'button', 'option',
+]);
+const FONT_ATTRIBUTES = new Set(['face', 'size', 'color']);
+const STYLE_PROPERTIES = new Set(['font-family', 'font-size', 'font-weight', 'font-style', 'color', 'text-align']);
+// `text-decoration` is stored as its longhands (line, style, color, thickness)
+const isAllowedStyle = (property: string) => STYLE_PROPERTIES.has(property) || property.startsWith('text-decoration');
+
+// Removes everything but allowed markup from `root`, in place. Returns whether anything
+// changed: clean content is left untouched, so the caret stays where it is while typing.
+export function sanitizeNode(root: Node): boolean {
+  let changed = false;
+  for (const node of Array.from(root.childNodes)) {
+    if (node.nodeType === Node.TEXT_NODE) continue;
+    if (!(node instanceof Element)) {
+      node.remove(); // comments and the like
+      changed = true;
+      continue;
+    }
+    const tag = node.localName;
+    if (node.namespaceURI !== HTML_NAMESPACE || DROPPED_TAGS.has(tag)) {
+      // Attributes first: a removed element can still fire handlers (e.g. an image's onerror)
+      for (const attr of Array.from(node.attributes)) node.removeAttribute(attr.name);
+      node.remove();
+      changed = true;
+      continue;
+    }
+    if (sanitizeNode(node)) changed = true;
+    if (!ALLOWED_TAGS.has(tag)) {
+      for (const attr of Array.from(node.attributes)) node.removeAttribute(attr.name);
+      unwrap(node); // keep its text
+      changed = true;
+      continue;
+    }
+    if (sanitizeAttributes(node as HTMLElement)) changed = true;
+  }
+  return changed;
+}
+
+function sanitizeAttributes(el: HTMLElement): boolean {
+  let changed = false;
+  for (const attr of Array.from(el.attributes)) {
+    if (attr.name === 'style' || (el.localName === 'font' && FONT_ATTRIBUTES.has(attr.name))) continue;
+    el.removeAttribute(attr.name);
+    changed = true;
+  }
+  if (el.hasAttribute('style')) {
+    for (const property of Array.from(el.style)) {
+      if (isAllowedStyle(property)) continue;
+      el.style.removeProperty(property);
+      changed = true;
+    }
+    if (el.style.length === 0) {
+      el.removeAttribute('style');
+      changed = true;
+    }
+  }
+  return changed;
+}
+
+// Clean text box HTML, parsed in an inert template so nothing in it loads or runs. The
+// cleaned tree is serialized again even when nothing was removed, so what gets parsed
+// later is exactly what was checked.
+export function sanitizeHtml(html: string): string {
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  sanitizeNode(template.content);
+  return template.innerHTML;
+}
+
 export function escapeHtml(text: string): string {
   const div = document.createElement('div');
   div.textContent = text;

@@ -1,5 +1,5 @@
 import { tick } from 'svelte';
-import { caretRangeAt, type RangeStyle } from '#lib/richtext.ts';
+import { caretRangeAt, sanitizeHtml, sanitizeNode, type RangeStyle } from '#lib/richtext.ts';
 import type { LabelElement, LineElement, RectElement, ShapeStyle, TextElement, TextStyle } from '#lib/types.ts';
 import { isChangingDocument } from './canvas.svelte';
 import { History } from './history.svelte';
@@ -122,7 +122,7 @@ function restore(json: string) {
     for (const el of editor.elements) {
       const editorNode = el.kind === 'text' ? editors.get(el.id) : undefined;
       if (el.kind === 'text' && editorNode && editorNode.innerHTML !== el.html) {
-        editorNode.innerHTML = el.html;
+        editorNode.innerHTML = sanitizeHtml(el.html);
       }
     }
   });
@@ -152,7 +152,7 @@ export function registerNode(node: HTMLElement, id: number) {
 
 // Registers a text box's editable element and fills in its initial content
 export function registerEditor(node: HTMLElement, box: TextElement) {
-  node.innerHTML = box.html;
+  node.innerHTML = sanitizeHtml(box.html);
   editors.set(box.id, node);
   return {
     destroy() {
@@ -182,8 +182,11 @@ export async function startEditing(boxId: number, event?: MouseEvent) {
 }
 
 // Stores what was typed into a text box
-export function updateTextHtml(box: TextElement, html: string) {
-  box.html = html;
+// Stores a text box's content after an edit, first stripping anything the browser let in
+// that the editor doesn't make itself (e.g. markup dropped in from another app)
+export function updateTextHtml(box: TextElement, node: HTMLElement) {
+  sanitizeNode(node);
+  box.html = node.innerHTML;
 }
 
 export function stopEditing() {
