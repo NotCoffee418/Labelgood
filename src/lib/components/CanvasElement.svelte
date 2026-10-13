@@ -1,11 +1,14 @@
 <!-- One element on the label, with its selection handles -->
 <script lang="ts">
+  import { BOX_INSET, PX_PER_MM } from '$lib/constants';
   import { cssFontFamily } from '$lib/fonts';
+  import { clampLength } from '$lib/formats';
   import { pastePlainText } from '$lib/richtext';
   import { canvas, pointer } from '$lib/state/canvas.svelte';
   import { editor, images, registerEditor, registerNode, updateTextHtml } from '$lib/state/editor.svelte';
   import { rotationOf } from '$lib/state/geometry';
   import { handleElementMouseDown, startElementResize, startEndpointDrag } from '$lib/state/gestures';
+  import { label } from '$lib/state/label.svelte';
   import type { LabelElement } from '$lib/types';
 
   const LINE_HIT_AREA = 10; // px, clickable thickness of a line
@@ -23,6 +26,22 @@
   const isDragged = $derived(pointer.dragging && isSelected);
   const dragTranslate = $derived(isDragged ? `${pointer.dragOffset.x}px ${pointer.dragOffset.y}px` : null);
   const rotation = $derived(rotationOf(el));
+
+  // A text box without a set width grows with its text up to the printable width, then
+  // wraps: wider than the label it couldn't be moved across it, and along a continuous
+  // label it would stretch the label. That width uses the label's own length, not the
+  // length its content needs, which would grow with the box.
+  const maxTextWidth = $derived.by(() => {
+    if (el.kind !== 'text' || el.w !== null) return null;
+    const width = label.continuousWidth ? clampLength(label.width) : label.width;
+    const height = label.continuousHeight ? clampLength(label.height) : label.height;
+    const rotated = label.viewRotation === 'rotated';
+    const m = label.displayMargins;
+    const across = rotation % 180 === 0
+      ? (rotated ? height : width) - m.left - m.right
+      : (rotated ? width : height) - m.top - m.bottom;
+    return Math.max(0, across * PX_PER_MM) + 2 * BOX_INSET;
+  });
 </script>
 
 {#if el.kind === 'line'}
@@ -67,7 +86,8 @@
     style:transform={rotation ? `rotate(${rotation}deg)` : null}
     style:left="{el.x}px"
     style:top="{el.y}px"
-    style:width={el.w !== null ? `${el.w}px` : null}
+    style:width={el.w !== null ? `${el.w}px` : maxTextWidth !== null ? 'max-content' : null}
+    style:max-width={maxTextWidth !== null ? `${maxTextWidth}px` : null}
     style:height={el.kind !== 'text' ? `${el.h}px` : null}
     style:min-height={el.kind === 'text' && el.h !== null ? `${el.h}px` : null}
     use:registerNode={el.id}
@@ -90,7 +110,7 @@
         style:font-style={el.style.italic ? 'italic' : 'normal'}
         style:text-decoration={el.style.underline ? 'underline' : 'none'}
         style:text-align={el.style.align}
-        style:white-space={el.w !== null ? 'pre-wrap' : 'pre'}
+        style:white-space="pre-wrap"
         use:registerEditor={el}
         oninput={(e) => updateTextHtml(el, e.currentTarget.innerHTML)}
         onpaste={pastePlainText}
