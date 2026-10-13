@@ -1,9 +1,12 @@
-// Mouse interaction on the canvas: selecting, moving, resizing, panning, the context menu
-// and dropping image files
+// Mouse interaction on the canvas: selecting, moving, resizing, panning, the context menu,
+// and files dropped onto the window
+import { getCurrentWebview } from '@tauri-apps/api/webview';
+import { readImageBytes } from '$lib/commands';
 import { MIN_ELEMENT_SIZE, PX_PER_MM } from '$lib/constants';
 import { clampLength } from '$lib/formats';
 import type { LabelElement, LineElement } from '$lib/types';
 import { canvas, pointer } from './canvas.svelte';
+import { fileName, openLabel } from './document.svelte';
 import { commit, deselect, editor, nodes, snapshot, startEditing, stopEditing } from './editor.svelte';
 import { dragArea, elementBounds, groupDelta, lengthForBounds, lengthItem, moveGroup, renderedSize, rotationOf } from './geometry';
 import { readImageFile } from './elements';
@@ -268,36 +271,66 @@ export function handleContextMenu(event: MouseEvent) {
   };
 }
 
-// ---- Dropping image files from other apps (anywhere in the window) ----
+// ---- Dropping files from other apps (anywhere in the window) ----
 
-function isFileDrag(event: DragEvent): boolean {
-  return !!event.dataTransfer?.types.includes('Files');
-}
+// Image types that can be dropped (the Rust side checks the same list)
+const IMAGE_TYPES: Record<string, string> = {
+  png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', gif: 'image/gif',
+  webp: 'image/webp', bmp: 'image/bmp', svg: 'image/svg+xml',
+};
+const extensionOf = (path: string) => path.slice(path.lastIndexOf('.') + 1).toLowerCase();
 
-// Accept file drags; other drags (text moved inside a text box) keep their default
-export function handleDocumentDragOver(event: DragEvent) {
-  if (!isFileDrag(event)) return;
-  event.preventDefault();
-  event.dataTransfer!.dropEffect = 'copy';
-}
-
-// Images dropped on the label are centred where they land, elsewhere they're placed as usual
-export function handleDocumentDrop(event: DragEvent) {
-  if (!isFileDrag(event)) return;
-  event.preventDefault(); // also stops the webview opening the file
+// A dropped .labelgood file opens; images are inserted, centred where they land when
+// that's on the label. `position` is in physical px from the webview's top-left.
+async function handleFileDrop(paths: string[], position: { x: number; y: number }) {
   if (output.printDialog || help.open) return;
-  const files = Array.from(event.dataTransfer!.files).filter(f => f.type.startsWith('image/'));
-  if (files.length === 0) {
-    status.message = { text: 'Only image files can be dropped onto the label.', error: true };
+  const labelFile = paths.find(path => extensionOf(path) === 'labelgood');
+  if (labelFile) {
+    openLabel(labelFile);
     return;
   }
+  const imagePaths = paths.filter(path => IMAGE_TYPES[extensionOf(path)]);
+  if (imagePaths.length === 0) {
+    status.message = { text: 'Only images and .labelgood labels can be dropped here.', error: true };
+    return;
+  }
+  const clientX = position.x / window.devicePixelRatio;
+  const clientY = position.y / window.devicePixelRatio;
   const rect = canvas.labelEl.getBoundingClientRect();
-  const onLabel = event.clientX >= rect.left && event.clientX <= rect.right
-    && event.clientY >= rect.top && event.clientY <= rect.bottom;
-  files.forEach((file, i) => readImageFile(file, onLabel ? {
-    x: (event.clientX - rect.left) / canvas.zoom + i * DROP_OFFSET,
-    y: (event.clientY - rect.top) / canvas.zoom + i * DROP_OFFSET,
-  } : undefined));
+  const onLabel = clientX >= rect.left && clientX <= rect.right && clientY >= rect.top && clientY <= rect.bottom;
+  for (const [i, path] of imagePaths.entries()) {
+    let bytes;
+    try {
+      bytes = await readImageBytes(path);
+    } catch (error) {
+      status.message = { text: String(error), error: true };
+      continue;
+    }
+    const file = new File([bytes], fileName(path), { type: IMAGE_TYPES[extensionOf(path)] });
+    readImageFile(file, onLabel ? {
+      x: (clientX - rect.left) / canvas.zoom + i * DROP_OFFSET,
+      y: (clientY - rect.top) / canvas.zoom + i * DROP_OFFSET,
+    } : undefined);
+  }
+}
+
+// Tauri handles file drops (the webview's own drop events have no file paths, which
+// opening a label needs). Returns a function that stops listening.
+export function listenForFileDrops(): () => void {
+  let unlisten: (() => void) | undefined;
+  let stopped = false;
+  try {
+    getCurrentWebview()
+      .onDragDropEvent(event => {
+        if (event.payload.type === 'drop') handleFileDrop(event.payload.paths, event.payload.position);
+      })
+      .then(fn => stopped ? fn() : unlisten = fn)
+      .catch(() => {});
+  } catch {} // getCurrentWebview throws outside Tauri
+  return () => {
+    stopped = true;
+    unlisten?.();
+  };
 }
 
 // ---- Moving and releasing (window-wide, so gestures continue outside the canvas) ----

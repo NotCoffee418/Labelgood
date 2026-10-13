@@ -177,6 +177,23 @@ async fn open_document(path: String) -> Result<String, String> {
     std::fs::read_to_string(document_path(&path)?).map_err(|e| format!("Failed to open {}: {}", path, e))
 }
 
+/// Image types that can be dropped onto the label (the frontend checks the same list)
+const IMAGE_EXTENSIONS: &[&str] = &["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"];
+
+/// Reads an image file dropped onto the window. Only image files are read.
+#[tauri::command]
+async fn read_image_file(path: String) -> Result<tauri::ipc::Response, String> {
+    let is_image = Path::new(&path)
+        .extension()
+        .is_some_and(|ext| IMAGE_EXTENSIONS.iter().any(|known| ext.eq_ignore_ascii_case(known)));
+    if !is_image {
+        return Err(format!("Not an image file: {}", path));
+    }
+    std::fs::read(&path)
+        .map(tauri::ipc::Response::new)
+        .map_err(|e| format!("Failed to read {}: {}", path, e))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // WebKitGTK's DMA-BUF renderer fails on some GPU/Wayland setups (notably NVIDIA),
@@ -206,7 +223,8 @@ pub fn run() {
             default_fonts,
             save_document,
             open_document,
-            opened_file
+            opened_file,
+            read_image_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

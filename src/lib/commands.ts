@@ -27,6 +27,9 @@ export type PdfOptions = {
 // Label files (.labelgood): the document as JSON
 export const saveDocument = (path: string, contents: string) => invoke<void>('save_document', { path, contents });
 export const openDocument = (path: string) => invoke<string>('open_document', { path });
+// An image file dropped onto the window, as raw bytes
+export const readImageBytes = (path: string) => invoke<ArrayBuffer>('read_image_file', { path });
+
 // The label file the app was started with, if any (only reported once)
 export const openedFile = () => invoke<string | null>('opened_file');
 
