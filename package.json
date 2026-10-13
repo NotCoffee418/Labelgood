@@ -1,6 +1,6 @@
 {
   "name": "labelgood",
-  "version": "0.1.0",
+  "version": "0.0.0",
   "description": "Label editor and printer",
   "type": "module",
   "scripts": {

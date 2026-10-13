@@ -16,6 +16,8 @@ import { status } from './status.svelte';
 const FILE_FORMAT = 'labelgood';
 
 // Version of the file format this app writes, saved in every file as `version`.
+// It's unrelated to the app's version (that comes from the release tag): it only
+// changes when the file format itself does, by hand, in this file.
 //
 // Files with a higher version than this are refused (see loadFile): they come from a
 // newer Labelgood, and reading them here could silently lose or misplace things, and

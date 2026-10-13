@@ -1,6 +1,8 @@
 [package]
 name = "labelgood"
-version = "0.1.0"
+# Placeholder: releases take their version from the git tag (see .github/workflows/release.yml).
+# 0.0.0 marks a development build; don't bump it by hand.
+version = "0.0.0"
 description = "Label editor and printer"
 license = "MIT"
 repository = "https://github.com/NotCoffee418/Labelgood"

@@ -105,7 +105,8 @@ jobs:
 
       - name: Build packages
         run: |
-          # Packages take their version from the tag (passed as a file to avoid shell quoting issues)
+          # Packages take their version from the tag (passed as a file to avoid shell quoting issues).
+          # This is the only place versions come from: Cargo.toml's 0.0.0 marks a development build.
           echo "{\"version\":\"${GITHUB_REF_NAME#v}\"}" > release-version.json
           # Software centers show the version and date from the AppStream metadata
           sed -i "s|^  <releases>\$|&\n    <release version=\"${GITHUB_REF_NAME#v}\" date=\"$(date -u +%F)\"/>|" src-tauri/linux/com.labelgood.app.metainfo.xml

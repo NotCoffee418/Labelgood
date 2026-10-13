@@ -4,6 +4,10 @@ import { message } from '@tauri-apps/plugin-dialog';
 import { openUrl } from '@tauri-apps/plugin-opener';
 import { status } from './status.svelte';
 
+// The version a build has when it isn't a release (see the version in Cargo.toml). Releases
+// get theirs from the git tag, so the app never needs its version bumped by hand.
+const DEV_VERSION = '0.0.0';
+
 const REPO_URL = 'https://github.com/NotCoffee418/Labelgood';
 const LATEST_RELEASE_API = 'https://api.github.com/repos/NotCoffee418/Labelgood/releases/latest';
 
@@ -36,7 +40,8 @@ export async function checkForUpdates() {
   try {
     const response = await fetch(LATEST_RELEASE_API, { headers: { Accept: 'application/vnd.github+json' } });
     if (response.status === 404) {
-      await message(`No releases have been published yet. You have version ${current}.`, { title });
+      const yours = current === DEV_VERSION ? 'a development build' : `version ${current}`;
+      await message(`No releases have been published yet. You have ${yours}.`, { title });
       return;
     }
     if (!response.ok) throw new Error(`GitHub answered with ${response.status} ${response.statusText}`);
@@ -47,6 +52,15 @@ export async function checkForUpdates() {
   }
 
   const latest = release.tag_name.replace(/^v/, '');
+  if (current === DEV_VERSION) {
+    // A development build has no real version to compare
+    const answer = await message(`This is a development build. The latest release is ${latest}.`, {
+      title,
+      buttons: { ok: 'Open Release Page', cancel: 'Close' },
+    });
+    if (answer === 'Open Release Page' || answer === 'Ok') openLink(release.html_url);
+    return;
+  }
   if (!isNewer(latest, current)) {
     await message(`You have the latest version (${current}).`, { title });
     return;
@@ -60,7 +74,8 @@ export async function checkForUpdates() {
 
 export async function showAbout() {
   const version = await getVersion();
-  await message(`Labelgood ${version}\nLabel editor and printer\n\n© Stijn Raeymaekers · MIT License\n${REPO_URL}`, {
+  const shown = version === DEV_VERSION ? '(development build)' : version;
+  await message(`Labelgood ${shown}\nLabel editor and printer\n\n© Stijn Raeymaekers · MIT License\n${REPO_URL}`, {
     title: 'About Labelgood',
   });
 }
