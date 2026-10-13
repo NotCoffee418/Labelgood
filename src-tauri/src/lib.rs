@@ -269,7 +269,10 @@ pub fn run() {
             recovery_discard_all
         ])
         .setup(|app| {
-            let dir = app.path().app_local_data_dir()?.join("recovery");
+            // Development builds keep theirs apart: `tauri dev` kills the app on every
+            // rebuild, which looks like a crash, and an installed Labelgood shares the folder
+            let folder = if cfg!(debug_assertions) { "recovery-dev" } else { "recovery" };
+            let dir = app.path().app_local_data_dir()?.join(folder);
             app.manage(Recovery::start(dir));
             Ok(())
         })

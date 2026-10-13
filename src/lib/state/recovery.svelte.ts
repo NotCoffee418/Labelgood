@@ -121,8 +121,15 @@ export async function discardAllRecovery() {
   await refreshRecovery();
 }
 
-// At startup: offers back unsaved work from Labelgood windows that ended without saving it
+// At startup: offers back unsaved work from Labelgood windows that ended without saving it.
+// Once per run: in development the page reloads on every code change, and what's left
+// stays under File > Recover Unsaved Labels anyway.
 export async function offerRecovery() {
+  const OFFERED = 'labelgood-recovery-offered';
+  try {
+    if (sessionStorage.getItem(OFFERED)) return;
+    sessionStorage.setItem(OFFERED, '1');
+  } catch {} // no session storage: offer every time
   await refreshRecovery();
   const [latest, ...others] = recovery.entries;
   if (!latest) return;
