@@ -117,6 +117,14 @@ impl Recovery {
         let mut entries = Vec::new();
         for entry in dir.flatten() {
             let path = entry.path();
+            // A write cut short (e.g. `<id>.labelgood.tmp`) leaves a temporary file behind
+            if path.extension().is_some_and(|ext| ext == "tmp") {
+                let id = path.file_name().and_then(|name| name.to_str()).and_then(|name| name.split('.').next());
+                if id.is_some_and(|id| Self::check_id(id).is_ok() && self.has_ended(id)) {
+                    let _ = remove(&path);
+                }
+                continue;
+            }
             let (Some(id), Some(extension)) = (
                 path.file_stem().and_then(|s| s.to_str()).map(str::to_string),
                 path.extension().and_then(|s| s.to_str()),

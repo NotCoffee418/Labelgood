@@ -35,7 +35,8 @@ const FILE_FORMAT = 'labelgood';
 const FILE_VERSION = 1;
 const EXTENSION = 'labelgood';
 const FILTERS = [{ name: 'Labelgood label', extensions: [EXTENSION] }];
-const ELEMENT_KINDS = ['text', 'rect', 'image', 'line'];
+const ORIENTATIONS = ['landscape', 'portrait'];
+const MARGIN_MODES = ['default', 'none', 'custom'];
 const MAX_RECENT = 8;
 const AUTO_SAVE_DELAY = 2000; // ms after the last change
 
@@ -128,25 +129,79 @@ function loadFile(text: string) {
     );
   }
   // Upgrades from older format versions go here, once there are any
-  const fileImages: Record<string, ImageInfo> = file.images ?? {};
-  const elements = (file.elements as LabelElement[]).filter(el =>
-    ELEMENT_KINDS.includes(el?.kind) && (el.kind !== 'image' || fileImages[el.imageId]?.src)
-  );
+
+  const fileImages: Record<string, ImageInfo> = {};
+  for (const [id, info] of Object.entries(file.images ?? {}) as [string, ImageInfo][]) {
+    if (typeof info?.src === 'string' && isNumber(info.width) && isNumber(info.height)) fileImages[id] = info;
+  }
+  const elements = readElements(file.elements, fileImages);
   for (const [id, info] of Object.entries(fileImages)) images.set(id, info);
 
-  // Anything the file doesn't say keeps the current setting
+  // Anything the file doesn't say (or says wrong) keeps the current setting
   const l = file.label ?? {};
+  const size = (value: unknown, current: number) => isNumber(value) && value > 0 ? value : current;
+  const flag = (value: unknown, current: boolean) => typeof value === 'boolean' ? value : current;
+  const margins = { ...label.customMargins };
+  for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+    if (isNumber(l.customMargins?.[side]) && l.customMargins[side] >= 0) margins[side] = l.customMargins[side];
+  }
   replaceDocument(JSON.stringify({
     elements,
-    labelFormat: l.format ?? label.format,
-    width: l.width ?? label.width,
-    height: l.height ?? label.height,
-    continuousWidth: l.continuousWidth ?? label.continuousWidth,
-    continuousHeight: l.continuousHeight ?? label.continuousHeight,
-    orientation: l.orientation ?? label.orientation,
-    marginMode: l.marginMode ?? label.marginMode,
-    customMargins: { ...label.customMargins, ...l.customMargins },
+    labelFormat: typeof l.format === 'string' ? l.format : label.format,
+    width: size(l.width, label.width),
+    height: size(l.height, label.height),
+    continuousWidth: flag(l.continuousWidth, label.continuousWidth),
+    continuousHeight: flag(l.continuousHeight, label.continuousHeight),
+    orientation: ORIENTATIONS.includes(l.orientation) ? l.orientation : label.orientation,
+    marginMode: MARGIN_MODES.includes(l.marginMode) ? l.marginMode : label.marginMode,
+    customMargins: margins,
   }));
+}
+
+const isNumber = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
+
+// A file's elements, checked enough that a damaged or hand-edited file can't break the
+// editor: incomplete elements are left out, missing styles fall back to the defaults, and
+// ids are renumbered so they're unique
+function readElements(raw: unknown[], fileImages: Record<string, ImageInfo>): LabelElement[] {
+  const elements: LabelElement[] = [];
+  for (const el of raw as any[]) {
+    if (!el || typeof el !== 'object') continue;
+    const id = elements.length + 1;
+    const placed = isNumber(el.x) && isNumber(el.y);
+    const sized = isNumber(el.w) && isNumber(el.h);
+    const rotation = isNumber(el.rotation) ? { rotation: el.rotation } : {};
+    const { stroke, color, fill } = editor.defaultShape;
+    switch (el.kind) {
+      case 'text':
+        if (!placed || typeof el.html !== 'string') continue;
+        elements.push({
+          kind: 'text', id, x: el.x, y: el.y, w: isNumber(el.w) ? el.w : null, h: isNumber(el.h) ? el.h : null,
+          html: el.html, style: { ...editor.defaultStyle, ...(typeof el.style === 'object' ? el.style : {}) }, ...rotation,
+        });
+        break;
+      case 'rect':
+        if (!placed || !sized) continue;
+        elements.push({
+          kind: 'rect', id, x: el.x, y: el.y, w: el.w, h: el.h,
+          stroke: isNumber(el.stroke) ? el.stroke : stroke, color: typeof el.color === 'string' ? el.color : color,
+          fill: typeof el.fill === 'boolean' ? el.fill : fill,
+        });
+        break;
+      case 'image':
+        if (!placed || !sized || !fileImages[el.imageId]) continue;
+        elements.push({ kind: 'image', id, x: el.x, y: el.y, w: el.w, h: el.h, imageId: el.imageId, ...rotation });
+        break;
+      case 'line':
+        if (![el.x1, el.y1, el.x2, el.y2].every(isNumber)) continue;
+        elements.push({
+          kind: 'line', id, x1: el.x1, y1: el.y1, x2: el.x2, y2: el.y2,
+          stroke: isNumber(el.stroke) ? el.stroke : stroke, color: typeof el.color === 'string' ? el.color : color,
+        });
+        break;
+    }
+  }
+  return elements;
 }
 
 // Before the label is closed or replaced: saves it if Auto Save covers it, else asks what
@@ -169,6 +224,9 @@ let saving: Promise<unknown> = Promise.resolve();
 // Saves the label to `path`. `quiet` (auto save) only reports failures.
 function writeTo(path: string, quiet = false): Promise<boolean> {
   const result = saving.then(async () => {
+    // An auto save that waited behind another save may be out of date: the label may
+    // have been saved already, or saved as (or replaced by) another file
+    if (quiet && (labelDocument.path !== path || !labelDocument.dirty)) return true;
     const json = editor.documentJson;
     try {
       await saveDocument(path, fileContents());

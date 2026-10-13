@@ -25,7 +25,7 @@ use windows::Win32::Graphics::Printing::{
     ClosePrinter, DocumentPropertiesW, EnumPrintersW, OpenPrinterW, PRINTER_ENUM_CONNECTIONS, PRINTER_ENUM_LOCAL,
     PRINTER_HANDLE, PRINTER_INFO_4W,
 };
-use windows::Win32::Storage::Xps::{EndDoc, EndPage, StartDocW, StartPage, DOCINFOW};
+use windows::Win32::Storage::Xps::{AbortDoc, EndDoc, EndPage, StartDocW, StartPage, DOCINFOW};
 use windows::Win32::System::Com::StructuredStorage::CreateStreamOnHGlobal;
 use windows::Win32::System::Com::{CoInitializeEx, IStream, COINIT_MULTITHREADED, STREAM_SEEK_END, STREAM_SEEK_SET};
 
@@ -263,8 +263,10 @@ fn draw_label(job: &PrintJob, devmode: *const DEVMODEW) -> Result<(), String> {
         if StartDocW(dc.0, &doc) <= 0 {
             return Err("Couldn't start the print job".to_string());
         }
+        // On failure the job is aborted rather than ended, which would still print (an
+        // empty label)
         if StartPage(dc.0) <= 0 {
-            EndDoc(dc.0);
+            AbortDoc(dc.0);
             return Err("Couldn't start the page".to_string());
         }
 
@@ -286,10 +288,16 @@ fn draw_label(job: &PrintJob, devmode: *const DEVMODEW) -> Result<(), String> {
             SRCCOPY,
         );
 
-        EndPage(dc.0);
-        EndDoc(dc.0);
         if lines == 0 {
+            AbortDoc(dc.0);
             return Err("Couldn't draw the label".to_string());
+        }
+        if EndPage(dc.0) <= 0 {
+            AbortDoc(dc.0);
+            return Err("Couldn't finish the page".to_string());
+        }
+        if EndDoc(dc.0) <= 0 {
+            return Err("Couldn't send the label to the printer".to_string());
         }
         Ok(())
     }

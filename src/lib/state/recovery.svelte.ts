@@ -26,20 +26,16 @@ export const entryTime = (entry: RecoveryEntry) =>
 // Writes and removals of this window's copy run in order, so a removal can't be
 // overtaken by a write that started before it
 let queue: Promise<unknown> = Promise.resolve();
-let hasCopy = false;
 let closing = false;
 
+// Writes the copy, or removes it once there's nothing unsaved. Removing always asks the
+// backend (rather than remembering whether there's a copy), so a reload can't leave one behind.
 function updateCopy() {
   queue = queue.then(async () => {
     if (closing) return;
     try {
-      if (labelDocument.dirty) {
-        await recoveryWrite(fileContents(), labelDocument.path);
-        hasCopy = true;
-      } else if (hasCopy) {
-        await recoveryClear();
-        hasCopy = false;
-      }
+      if (labelDocument.dirty) await recoveryWrite(fileContents(), labelDocument.path);
+      else await recoveryClear();
     } catch (error) {
       console.error('Updating the recovery copy failed:', error);
     }
