@@ -3,10 +3,13 @@ use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
+use recovery::Recovery;
+use tauri::Manager;
 use tauri_plugin_window_state::StateFlags;
 
 mod pdf;
 mod print_schema;
+mod recovery;
 
 // Printing and font listing differ per platform; both expose the same functions
 #[cfg(not(windows))]
@@ -141,19 +144,20 @@ fn document_path(path: &str) -> Result<&Path, String> {
     }
 }
 
-/// Saves a label file. Written to a temporary file first and then moved over the
-/// target, so a failed save never leaves a half-written label behind.
-#[tauri::command]
-async fn save_document(path: String, contents: String) -> Result<(), String> {
-    let target = document_path(&path)?;
+/// Writes a file through a temporary file that's then moved over the target, so a
+/// failed write never leaves a half-written file behind
+fn write_atomically(target: &Path, contents: &str) -> Result<(), String> {
     let mut temp = target.as_os_str().to_owned();
     temp.push(".tmp");
-    std::fs::write(&temp, contents)
-        .and_then(|_| std::fs::rename(&temp, target))
-        .map_err(|e| {
-            let _ = std::fs::remove_file(&temp);
-            format!("Failed to save {}: {}", path, e)
-        })
+    std::fs::write(&temp, contents).and_then(|_| std::fs::rename(&temp, target)).map_err(|e| {
+        let _ = std::fs::remove_file(&temp);
+        format!("Failed to save {}: {}", target.display(), e)
+    })
+}
+
+#[tauri::command]
+async fn save_document(path: String, contents: String) -> Result<(), String> {
+    write_atomically(document_path(&path)?, &contents)
 }
 
 /// The label file the app was started with ("Open with", or double-clicking a
@@ -194,6 +198,38 @@ async fn read_image_file(path: String) -> Result<tauri::ipc::Response, String> {
         .map_err(|e| format!("Failed to read {}: {}", path, e))
 }
 
+// Crash recovery (see recovery.rs)
+
+#[tauri::command]
+async fn recovery_write(recovery: tauri::State<'_, Recovery>, contents: String, path: Option<String>) -> Result<(), String> {
+    recovery.write(&contents, path)
+}
+
+#[tauri::command]
+async fn recovery_clear(recovery: tauri::State<'_, Recovery>) -> Result<(), String> {
+    recovery.clear()
+}
+
+#[tauri::command]
+async fn recovery_list(recovery: tauri::State<'_, Recovery>) -> Result<Vec<recovery::RecoveryEntry>, String> {
+    Ok(recovery.list())
+}
+
+#[tauri::command]
+async fn recovery_read(recovery: tauri::State<'_, Recovery>, id: String) -> Result<String, String> {
+    recovery.read(&id)
+}
+
+#[tauri::command]
+async fn recovery_discard(recovery: tauri::State<'_, Recovery>, id: String) -> Result<(), String> {
+    recovery.discard(&id)
+}
+
+#[tauri::command]
+async fn recovery_discard_all(recovery: tauri::State<'_, Recovery>) -> Result<(), String> {
+    recovery.discard_all()
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // WebKitGTK's DMA-BUF renderer fails on some GPU/Wayland setups (notably NVIDIA),
@@ -224,8 +260,24 @@ pub fn run() {
             save_document,
             open_document,
             opened_file,
-            read_image_file
+            read_image_file,
+            recovery_write,
+            recovery_clear,
+            recovery_list,
+            recovery_read,
+            recovery_discard,
+            recovery_discard_all
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .setup(|app| {
+            let dir = app.path().app_local_data_dir()?.join("recovery");
+            app.manage(Recovery::start(dir));
+            Ok(())
+        })
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app, event| {
+            if let tauri::RunEvent::Exit = event {
+                app.state::<Recovery>().end();
+            }
+        });
 }

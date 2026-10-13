@@ -37,6 +37,7 @@ const EXTENSION = 'labelgood';
 const FILTERS = [{ name: 'Labelgood label', extensions: [EXTENSION] }];
 const ELEMENT_KINDS = ['text', 'rect', 'image', 'line'];
 const MAX_RECENT = 8;
+const AUTO_SAVE_DELAY = 2000; // ms after the last change
 
 type ImageInfo = { src: string; width: number; height: number };
 
@@ -46,6 +47,9 @@ class LabelDocument {
   savedJson = $state<string | null>(null);
   lastDir = $state<string | null>(null); // where labels were last opened or saved, remembered between runs
   recent = $state<string[]>([]); // recently opened or saved labels, newest first, remembered between runs
+  // Save labels that have a file shortly after each change (remembered between runs). Labels
+  // without a file yet are covered by crash recovery instead (see recovery.svelte.ts).
+  autoSave = $state(true);
 
   name = $derived(this.path ? fileName(this.path) : 'Untitled');
   dirty = $derived(this.savedJson !== null && editor.documentJson !== this.savedJson);
@@ -77,7 +81,7 @@ export function markStartingDocument() {
   if (labelDocument.savedJson === null) labelDocument.savedJson = editor.documentJson;
 }
 
-function fileContents(): string {
+export function fileContents(): string {
   const used: Record<string, ImageInfo> = {};
   for (const el of editor.elements) {
     const info = el.kind === 'image' ? images.get(el.imageId) : undefined;
@@ -145,9 +149,11 @@ function loadFile(text: string) {
   }));
 }
 
-// Asks what to do with unsaved changes; false when the user cancels
-async function settleUnsavedChanges(): Promise<boolean> {
+// Before the label is closed or replaced: saves it if Auto Save covers it, else asks what
+// to do with unsaved changes. False when the user cancels (or the save fails).
+export async function settleUnsavedChanges(): Promise<boolean> {
   if (!labelDocument.dirty) return true;
+  if (labelDocument.autoSave && labelDocument.path && await writeTo(labelDocument.path, true)) return true;
   const answer = await message(`Save changes to ${labelDocument.name}?`, {
     title: 'Unsaved changes',
     kind: 'warning',
@@ -157,20 +163,28 @@ async function settleUnsavedChanges(): Promise<boolean> {
   return answer === "Don't Save" || answer === 'No';
 }
 
-async function writeTo(path: string): Promise<boolean> {
-  const json = editor.documentJson;
-  try {
-    await saveDocument(path, fileContents());
-  } catch (error) {
-    status.message = { text: String(error), error: true };
-    return false;
-  }
-  labelDocument.path = path;
-  labelDocument.savedJson = json;
-  labelDocument.lastDir = await dirname(path);
-  addRecent(path);
-  status.message = { text: `Saved ${labelDocument.name}`, error: false };
-  return true;
+// Saves run one at a time, so an auto save and a manual one never write at once
+let saving: Promise<unknown> = Promise.resolve();
+
+// Saves the label to `path`. `quiet` (auto save) only reports failures.
+function writeTo(path: string, quiet = false): Promise<boolean> {
+  const result = saving.then(async () => {
+    const json = editor.documentJson;
+    try {
+      await saveDocument(path, fileContents());
+    } catch (error) {
+      status.message = { text: quiet ? `Auto Save failed: ${error}` : String(error), error: true };
+      return false;
+    }
+    labelDocument.path = path;
+    labelDocument.savedJson = json;
+    labelDocument.lastDir = await dirname(path);
+    addRecent(path);
+    if (!quiet) status.message = { text: `Saved ${labelDocument.name}`, error: false };
+    return true;
+  });
+  saving = result;
+  return result;
 }
 
 export async function saveLabel(): Promise<boolean> {
@@ -212,6 +226,14 @@ export async function openLabel(path?: string) {
   status.message = null;
 }
 
+// Puts a recovered label (see recovery.svelte.ts) in the editor. It stays unsaved: it's
+// newer than its file, if it has one, until that's saved again.
+export function restoreDocument(text: string, path: string | null) {
+  loadFile(text);
+  labelDocument.path = path;
+  labelDocument.savedJson = '';
+}
+
 // Opens the file the app was started with (double-clicked or "Open with"), if any
 export async function openStartupFile() {
   try {
@@ -229,7 +251,7 @@ export async function newLabel() {
   status.message = null;
 }
 
-// Window title with the file name, and a save prompt when closing with unsaved changes.
+// The window title shows the file name, with a dot for unsaved changes.
 // Call during component initialisation.
 export function trackDocumentWindow() {
   $effect(() => {
@@ -238,20 +260,22 @@ export function trackDocumentWindow() {
       getCurrentWindow().setTitle(title).catch(() => {});
     } catch {} // getCurrentWindow throws outside Tauri
   });
+}
+
+// Auto Save: a label with a file is saved once changes have settled.
+// Call during component initialisation.
+export function trackAutoSave() {
+  let timer: ReturnType<typeof setTimeout> | undefined;
   $effect(() => {
-    let unlisten: (() => void) | undefined;
-    let cancelled = false;
-    try {
-      getCurrentWindow()
-        .onCloseRequested(async (event) => {
-          if (!(await settleUnsavedChanges())) event.preventDefault();
-        })
-        .then(fn => cancelled ? fn() : unlisten = fn)
-        .catch(() => {});
-    } catch {}
-    return () => {
-      cancelled = true;
-      unlisten?.();
-    };
+    void editor.documentJson; // every change restarts the delay
+    const due = labelDocument.autoSave && labelDocument.dirty && labelDocument.path !== null;
+    clearTimeout(timer);
+    if (due) {
+      timer = setTimeout(() => {
+        const { path } = labelDocument;
+        if (labelDocument.autoSave && labelDocument.dirty && path) writeTo(path, true);
+      }, AUTO_SAVE_DELAY);
+    }
+    return () => clearTimeout(timer);
   });
 }

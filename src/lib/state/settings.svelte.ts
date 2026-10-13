@@ -39,6 +39,7 @@ export function loadSettings() {
     output.printChoices = s.printChoices ?? output.printChoices;
     output.lastSaveDir = s.lastSaveDir ?? output.lastSaveDir;
     labelDocument.lastDir = s.lastLabelDir ?? labelDocument.lastDir;
+    if (typeof s.autoSave === 'boolean') labelDocument.autoSave = s.autoSave;
     if (Array.isArray(s.recentLabels)) labelDocument.recent = s.recentLabels.filter((p: unknown) => typeof p === 'string');
     if (s.zoom >= MIN_ZOOM && s.zoom <= MAX_ZOOM) canvas.zoom = s.zoom;
   } catch (error) {
@@ -69,6 +70,7 @@ export function persistSettings() {
       lastSaveDir: output.lastSaveDir,
       lastLabelDir: labelDocument.lastDir,
       recentLabels: labelDocument.recent,
+      autoSave: labelDocument.autoSave,
       zoom: canvas.zoom,
     });
     clearTimeout(saveTimer);

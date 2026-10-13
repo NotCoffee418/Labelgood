@@ -7,6 +7,9 @@
     clearRecent, fileName, folderName, labelDocument, newLabel, openLabel, saveLabel, saveLabelAs,
   } from '$lib/state/document.svelte';
   import {
+    discardAllRecovery, entryName, entryTime, recovery, refreshRecovery, restoreRecovery,
+  } from '$lib/state/recovery.svelte';
+  import {
     editCopy, editCut, editDelete, editDuplicate, editPaste, editRedo, editSelectAll, editUndo, editingText,
   } from '$lib/state/edit';
   import { editor, history } from '$lib/state/editor.svelte';
@@ -21,7 +24,8 @@
     hint?: string; // tooltip
     checked?: boolean;
     disabled?: boolean;
-    action: () => unknown;
+    action?: () => unknown;
+    submenu?: Item[]; // opens to the side instead of running an action
   } | 'separator';
 
   const THEMES: { value: Theme; label: string }[] = [
@@ -39,19 +43,42 @@
         items: [
           { label: 'New', shortcut: 'Ctrl+N', action: newLabel },
           { label: 'Open…', shortcut: 'Ctrl+O', action: openLabel },
+          {
+            label: 'Open Recent',
+            submenu: labelDocument.recent.length === 0
+              ? [{ label: 'No recent labels', disabled: true }]
+              : [
+                ...labelDocument.recent.map((path): Item => ({
+                  label: fileName(path), shortcut: folderName(path), hint: path, action: () => openLabel(path),
+                })),
+                'separator',
+                { label: 'Clear Recent Files', action: clearRecent },
+              ],
+          },
           'separator',
           { label: 'Save', shortcut: 'Ctrl+S', action: saveLabel },
           { label: 'Save As…', shortcut: 'Ctrl+Shift+S', action: saveLabelAs },
+          {
+            label: 'Auto Save', checked: labelDocument.autoSave,
+            hint: 'Save labels that have a file shortly after each change',
+            action: () => labelDocument.autoSave = !labelDocument.autoSave,
+          },
+          {
+            label: 'Recover Unsaved Labels',
+            submenu: recovery.entries.length === 0
+              ? [{ label: 'Nothing to recover', disabled: true }]
+              : [
+                ...recovery.entries.map((entry): Item => ({
+                  label: entryName(entry), shortcut: entryTime(entry), hint: entry.path ?? 'Never saved',
+                  action: () => restoreRecovery(entry),
+                })),
+                'separator',
+                { label: 'Discard All…', action: discardAllRecovery },
+              ],
+          },
           'separator',
           { label: 'Save PDF…', disabled: output.busy, action: savePdf },
           { label: 'Print…', shortcut: 'Ctrl+P', disabled: output.busy, action: openPrintDialog },
-          ...(labelDocument.recent.length > 0 ? [
-            'separator' as const,
-            ...labelDocument.recent.map((path, i): Item => ({
-              label: `${i + 1} ${fileName(path)}`, shortcut: folderName(path), hint: path, action: () => openLabel(path),
-            })),
-            { label: 'Clear Recent Files', action: clearRecent },
-          ] : []),
         ],
       },
       {
@@ -97,19 +124,68 @@
   });
 
   let openMenu = $state<string | null>(null);
+  let openSubmenu = $state<string | null>(null);
+
+  function showMenu(title: string | null) {
+    openMenu = title;
+    openSubmenu = null;
+    if (title === 'File') refreshRecovery(); // another window may have ended since
+  }
 
   function run(item: Exclude<Item, 'separator'>) {
-    openMenu = null;
-    item.action();
+    showMenu(null);
+    item.action?.();
   }
 
   // Clicking anywhere else closes the menu
   function handleWindowMouseDown(event: MouseEvent) {
-    if (openMenu && !(event.target as HTMLElement).closest('.menu-bar')) openMenu = null;
+    if (openMenu && !(event.target as HTMLElement).closest('.menu-bar')) showMenu(null);
   }
 </script>
 
-<svelte:window onmousedown={handleWindowMouseDown} onkeydown={(e) => { if (openMenu && e.key === 'Escape') openMenu = null; }} />
+<svelte:window onmousedown={handleWindowMouseDown} onkeydown={(e) => { if (openMenu && e.key === 'Escape') showMenu(null); }} />
+
+<!-- A menu's items; `nested` for a submenu's -->
+{#snippet entries(items: Item[], nested: boolean)}
+  {#each items as item}
+    {#if item === 'separator'}
+      <hr />
+    {:else if item.submenu}
+      <div class="submenu-anchor" role="none" onmouseenter={() => openSubmenu = item.label}>
+        <button
+          role="menuitem"
+          class:active={openSubmenu === item.label}
+          aria-haspopup="menu"
+          aria-expanded={openSubmenu === item.label}
+          onmousedown={keepTextFocus}
+          onclick={() => openSubmenu = item.label}
+        >
+          <span class="check"></span>
+          <span class="item-label">{item.label}</span>
+          <span class="shortcut">›</span>
+        </button>
+        {#if openSubmenu === item.label}
+          <div class="menu-items submenu" role="menu">
+            {@render entries(item.submenu, true)}
+          </div>
+        {/if}
+      </div>
+    {:else}
+      <button
+        role="menuitem"
+        title={item.hint}
+        disabled={item.disabled}
+        onmousedown={keepTextFocus}
+        onmouseenter={() => { if (!nested) openSubmenu = null; }}
+        onclick={() => run(item)}
+      >
+        <span class="check">{item.checked ? '✓' : ''}</span>
+        <span class="item-label">{item.label}</span>
+        <span class="shortcut">{item.shortcut ?? ''}</span>
+      </button>
+    {/if}
+  {/each}
+{/snippet}
 
 <nav class="menu-bar" aria-label="Menu">
   <img class="app-logo" src="/logo.svg" alt="Labelgood" />
@@ -120,22 +196,12 @@
         class:open={openMenu === menu.title}
         aria-haspopup="menu"
         aria-expanded={openMenu === menu.title}
-        onmousedown={(e) => { e.preventDefault(); openMenu = openMenu === menu.title ? null : menu.title; }}
-        onmouseenter={() => { if (openMenu) openMenu = menu.title; }}
+        onmousedown={(e) => { e.preventDefault(); showMenu(openMenu === menu.title ? null : menu.title); }}
+        onmouseenter={() => { if (openMenu && openMenu !== menu.title) showMenu(menu.title); }}
       >{menu.title}</button>
       {#if openMenu === menu.title}
         <div class="menu-items" role="menu">
-          {#each menu.items as item}
-            {#if item === 'separator'}
-              <hr />
-            {:else}
-              <button role="menuitem" title={item.hint} disabled={item.disabled} onmousedown={keepTextFocus} onclick={() => run(item)}>
-                <span class="check">{item.checked ? '✓' : ''}</span>
-                <span class="item-label">{item.label}</span>
-                <span class="shortcut">{item.shortcut ?? ''}</span>
-              </button>
-            {/if}
-          {/each}
+          {@render entries(menu.items, false)}
         </div>
       {/if}
     </div>
@@ -211,12 +277,14 @@
     cursor: pointer;
   }
 
-  .menu-items button:hover:not(:disabled) {
+  .menu-items button:hover:not(:disabled),
+  .menu-items button.active {
     background: var(--accent);
     color: white;
   }
 
-  .menu-items button:hover:not(:disabled) .shortcut {
+  .menu-items button:hover:not(:disabled) .shortcut,
+  .menu-items button.active .shortcut {
     color: rgba(255, 255, 255, 0.8);
   }
 
@@ -238,6 +306,15 @@
   .shortcut {
     margin-left: 24px;
     color: var(--text-subtle);
+  }
+
+  .submenu-anchor {
+    position: relative;
+  }
+
+  .menu-items.submenu {
+    top: -5px;
+    left: calc(100% - 2px);
   }
 
   hr {

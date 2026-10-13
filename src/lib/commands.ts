@@ -33,5 +33,19 @@ export const readImageBytes = (path: string) => invoke<ArrayBuffer>('read_image_
 // The label file the app was started with, if any (only reported once)
 export const openedFile = () => invoke<string | null>('opened_file');
 
+// Crash recovery copies of unsaved labels (see src-tauri/src/recovery.rs)
+export type RecoveryEntry = {
+  id: string;
+  path: string | null; // the label's file, if it had been saved before
+  saved_at: number; // ms since the Unix epoch
+};
+export const recoveryWrite = (contents: string, path: string | null) => invoke<void>('recovery_write', { contents, path });
+export const recoveryClear = () => invoke<void>('recovery_clear');
+// Unsaved work from Labelgood windows that have ended, most recent first
+export const recoveryList = () => invoke<RecoveryEntry[]>('recovery_list');
+export const recoveryRead = (id: string) => invoke<string>('recovery_read', { id });
+export const recoveryDiscard = (id: string) => invoke<void>('recovery_discard', { id });
+export const recoveryDiscardAll = () => invoke<void>('recovery_discard_all');
+
 // Prints the label or saves it as a PDF; resolves to a message for the user
 export const generatePdf = (options: PdfOptions) => invoke<string>('generate_pdf', { options });

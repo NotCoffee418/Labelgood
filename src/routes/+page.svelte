@@ -9,7 +9,7 @@
   import Toolbar from '$lib/components/Toolbar.svelte';
   import { isEditableTarget } from '$lib/dom';
   import { handleDocumentPaste } from '$lib/state/clipboard.svelte';
-  import { markStartingDocument, openStartupFile, trackDocumentWindow } from '$lib/state/document.svelte';
+  import { markStartingDocument, openStartupFile, trackAutoSave, trackDocumentWindow } from '$lib/state/document.svelte';
   import { history } from '$lib/state/editor.svelte';
   import { initSampleBox } from '$lib/state/elements';
   import { loadFonts } from '$lib/state/fonts.svelte';
@@ -17,6 +17,7 @@
   import { listenForFileDrops } from '$lib/state/gestures';
   import { help } from '$lib/state/help.svelte';
   import { loadPrinters, output } from '$lib/state/output.svelte';
+  import { offerRecovery, trackRecovery } from '$lib/state/recovery.svelte';
   import { applyTheme, loadSettings, persistSettings } from '$lib/state/settings.svelte';
   import { handleKeyDown, handleKeyUp } from '$lib/state/shortcuts';
 
@@ -29,11 +30,14 @@
   applyTheme();
   history.track();
   trackDocumentWindow();
+  trackAutoSave();
+  trackRecovery();
 
   onMount(() => {
     loadPrinters();
     loadFonts();
-    openStartupFile();
+    // A double-clicked label opens first; unsaved work from a crash is offered after
+    openStartupFile().then(offerRecovery);
     return listenForFileDrops();
   });
 
