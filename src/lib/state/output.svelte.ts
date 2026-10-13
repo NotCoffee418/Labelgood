@@ -177,6 +177,7 @@ export async function printFromDialog() {
       image_data: output.printDialog.preview,
       width_mm: label.actualWidth,
       height_mm: label.actualHeight,
+      continuous: label.isContinuous,
       printer_name: output.selectedPrinter,
       output_path: null,
       copies: clampCopies(output.copies),

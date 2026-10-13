@@ -5,7 +5,7 @@
 //! of CUPS' `lpoptions`), so whatever the driver offers (e.g. Brother's cut settings)
 //! shows up in the print dialog. See `print_schema` for reading and writing that XML.
 
-use crate::print_schema::{delta_ticket, matching_media_size, parse_capabilities, ticket_selections, PSK};
+use crate::print_schema::{delta_ticket, matching_media_size, parse_capabilities, ticket_selections};
 use crate::{pdf::RgbImage, DefaultFonts, PrintJob, PrinterOption};
 use std::collections::BTreeSet;
 use windows::core::{w, BOOL, HSTRING, PCWSTR};
@@ -302,16 +302,15 @@ pub fn print(job: &PrintJob) -> Result<(), String> {
     // Prefer the driver's own named media (e.g. a Brother DK roll) over an arbitrary
     // custom size: some drivers handle a size they didn't themselves advertise
     // inconsistently, down to rejecting the job at the printer with a feed error.
-    let media = capabilities_xml(&provider).ok().and_then(|xml| matching_media_size(&xml, job.width_mm, job.height_mm));
+    let media = capabilities_xml(&provider)
+        .ok()
+        .and_then(|xml| matching_media_size(&xml, job.width_mm, job.height_mm, job.continuous));
 
-    let mut options = job.options.clone();
-    if let Some(media) = &media {
-        options.insert(format!("{}|{}", PSK, "PageMediaSize"), media.clone());
-    }
-
-    // Start from the printer's defaults and apply the chosen options on top
+    // Start from the printer's defaults and apply the chosen options on top. A
+    // continuous roll's length has to be set here: drivers like Brother's keep it in
+    // their private DEVMODE data and ignore dmPaperLength, leaving a zero length.
     let base = devmode_to_ticket(&provider, &default_devmode(job.printer)?)?;
-    let delta = stream_with(delta_ticket(&options).as_bytes())?;
+    let delta = stream_with(delta_ticket(job.options, media.as_ref()).as_bytes())?;
     let merged = new_stream()?;
     unsafe {
         PTMergeAndValidatePrintTicket(provider.0, &base, &delta, kPTJobScope, &merged, None)

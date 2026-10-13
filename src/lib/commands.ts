@@ -17,6 +17,7 @@ export type PdfOptions = {
   image_data: string; // PNG data URL at print resolution, in print orientation
   width_mm: number;
   height_mm: number;
+  continuous?: boolean; // on a continuous roll rather than die-cut
   printer_name: string | null; // print to this printer...
   output_path: string | null; // ...or save the PDF here
   copies?: number;

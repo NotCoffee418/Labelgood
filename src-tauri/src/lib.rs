@@ -21,6 +21,7 @@ struct PrintOptions {
     image_data: String, // Base64 encoded PNG image, 300 DPI, in print orientation
     width_mm: f64,
     height_mm: f64,
+    continuous: Option<bool>, // On a continuous roll (width across it, height its length) rather than die-cut
     printer_name: Option<String>, // If provided, send to this printer
     output_path: Option<String>,  // Otherwise, save the PDF here
     copies: Option<u32>,
@@ -50,6 +51,8 @@ pub struct PrintJob<'a> {
     image: &'a pdf::RgbImage,
     width_mm: f64,
     height_mm: f64,
+    #[cfg_attr(not(windows), allow(dead_code))] // CUPS gets the size alone
+    continuous: bool,
     printer: &'a str,
     copies: u32,
     options: &'a HashMap<String, String>,
@@ -102,6 +105,7 @@ async fn generate_pdf(options: PrintOptions) -> Result<String, String> {
             image: &image,
             width_mm: options.width_mm,
             height_mm: options.height_mm,
+            continuous: options.continuous.unwrap_or(false),
             printer: printer_name,
             copies,
             options: &options.print_options.unwrap_or_default(),
