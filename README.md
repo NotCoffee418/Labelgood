@@ -1,6 +1,6 @@
 # ![](src-tauri/icons/32x32.png) Labelgood
 
-A label editor for label printers such as the Brother QL series. Design labels with text, lines, rectangles and images, then print them directly or save them as PDF. Runs on Windows and Linux.
+A label editor for label printers such as the Brother QL series. Design labels with text, lines, rectangles and images, then print them directly or save them as PDF. Labels save as `.labelgood` files, with auto save and crash recovery. Runs on Windows and Linux.
 
 ![Labelgood preview](images/labelgood_preview.png)
 
@@ -47,6 +47,13 @@ The print dialog shows whatever options the selected printer's driver offers (cu
 
 See [SUPPORTED_DEVICES.md](SUPPORTED_DEVICES.md) for details, and to report a printer that isn't listed.
 
+## Label Files
+
+Labels save as `.labelgood` files (File > Save), with images embedded, so one file is the whole label. The installer, the `.deb`/`.rpm` packages and `install.sh` register the file type, so double-clicking a label opens it in Labelgood. Dropping a label onto the window opens it too.
+
+- **Auto Save** (File menu, on by default) saves a label that already has a file shortly after each change.
+- **Crash recovery**: while a label has unsaved changes, a copy is kept in the app's data folder. If Labelgood closes without saving them (a crash, power loss), the next start offers to restore it. Leftovers are under File > Recover Unsaved Labels.
+
 ## Development
 
 ### Prerequisites
@@ -70,7 +77,8 @@ npm run tauri build  # build the app and its installers/packages
   - `lib/components/` - UI components (toolbar, canvas, settings panel, print dialog, ...)
   - `lib/state/` - shared state (runes in `.svelte.ts` modules) and the editor's behaviour: elements, undo, mouse gestures, keyboard shortcuts, clipboard, printing, settings
   - `lib/` - helpers without app state: types, label formats, rich text editing, rendering for print, and typed wrappers for the Rust commands
-- `src-tauri/` - Rust backend (printing, PDF generation, fonts)
+- `src-tauri/` - Rust backend (printing, PDF generation, fonts, label files, crash recovery)
+  - `linux/` - desktop entry template, file type definition and AppStream metadata for the Linux packages
 - `static/` - Static assets
 - `.vscode/` - Editor settings and recommended extensions
 
@@ -85,7 +93,9 @@ git tag v1.0.0
 git push origin v1.0.0
 ```
 
-Tags must be plain `vMAJOR.MINOR.PATCH`; the packages take their version from the tag.
+Tags must be plain `vMAJOR.MINOR.PATCH`. The tag is the only place the version comes from: the version in `Cargo.toml` and `package.json` is a `0.0.0` placeholder that marks development builds, so there's nothing to bump by hand.
+
+The label file format has its own version (`FILE_VERSION` in `src/lib/state/document.svelte.ts`), which only changes when the file format does; see the comment there.
 
 The workflow runs the tests, then builds with Tauri's bundler:
 
