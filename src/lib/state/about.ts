@@ -46,6 +46,10 @@ export async function checkForUpdates() {
     }
     if (!response.ok) throw new Error(`GitHub answered with ${response.status} ${response.statusText}`);
     release = await response.json();
+    // Only ever send the user to this repository's own releases
+    if (typeof release?.tag_name !== 'string' || typeof release.html_url !== 'string' || !release.html_url.startsWith(`${REPO_URL}/releases/`)) {
+      throw new Error('GitHub sent an unexpected answer');
+    }
   } catch (error) {
     await message(`Couldn't check for updates: ${error instanceof Error ? error.message : error}`, { title, kind: 'error' });
     return;

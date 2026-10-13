@@ -5,6 +5,11 @@ on:
     tags:
       - "v*"
 
+# Read-only unless a job says otherwise: the builds run third-party code (npm and cargo
+# packages), which shouldn't get a token that can change the repository or its releases
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
@@ -35,7 +40,9 @@ jobs:
         run: npm run build
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        with:
+          toolchain: stable
 
       - name: Cache cargo registry
         uses: actions/cache@v6.1.0
@@ -87,7 +94,9 @@ jobs:
         run: npm ci
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        with:
+          toolchain: stable
 
       - name: Install Tauri dependencies (Linux)
         run: |
@@ -159,8 +168,9 @@ jobs:
         run: npm ci
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
         with:
+          toolchain: stable
           targets: ${{ matrix.target }}
 
       - name: Cache cargo

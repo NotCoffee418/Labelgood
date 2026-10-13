@@ -121,8 +121,13 @@ async fn generate_pdf(options: PrintOptions) -> Result<String, String> {
             format!("Printed to {}", printer_name)
         })
     } else if let Some(output_path) = &options.output_path {
+        // Only ever writes a PDF, so this can't be used to overwrite anything else
+        let path = Path::new(output_path);
+        if !path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case("pdf")) {
+            return Err(format!("Not a .pdf file: {}", output_path));
+        }
         let pdf_bytes = pdf::image_pdf(&image, pdf::mm_to_pt(options.width_mm), pdf::mm_to_pt(options.height_mm));
-        std::fs::write(Path::new(output_path), pdf_bytes)
+        std::fs::write(path, pdf_bytes)
             .map_err(|e| format!("Failed to save {}: {}", output_path, e))?;
         Ok(format!("Saved to {}", output_path))
     } else {
