@@ -39,6 +39,7 @@ export function loadSettings() {
     output.printChoices = s.printChoices ?? output.printChoices;
     output.lastSaveDir = s.lastSaveDir ?? output.lastSaveDir;
     labelDocument.lastDir = s.lastLabelDir ?? labelDocument.lastDir;
+    if (Array.isArray(s.recentLabels)) labelDocument.recent = s.recentLabels.filter((p: unknown) => typeof p === 'string');
     if (s.zoom >= MIN_ZOOM && s.zoom <= MAX_ZOOM) canvas.zoom = s.zoom;
   } catch (error) {
     console.error('Failed to load settings:', error);
@@ -67,6 +68,7 @@ export function persistSettings() {
       printChoices: output.printChoices,
       lastSaveDir: output.lastSaveDir,
       lastLabelDir: labelDocument.lastDir,
+      recentLabels: labelDocument.recent,
       zoom: canvas.zoom,
     });
     clearTimeout(saveTimer);

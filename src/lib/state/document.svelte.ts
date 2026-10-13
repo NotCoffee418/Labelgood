@@ -36,6 +36,7 @@ const FILE_VERSION = 1;
 const EXTENSION = 'labelgood';
 const FILTERS = [{ name: 'Labelgood label', extensions: [EXTENSION] }];
 const ELEMENT_KINDS = ['text', 'rect', 'image', 'line'];
+const MAX_RECENT = 8;
 
 type ImageInfo = { src: string; width: number; height: number };
 
@@ -44,12 +45,32 @@ class LabelDocument {
   // The document as last saved, opened or started; anything else is unsaved
   savedJson = $state<string | null>(null);
   lastDir = $state<string | null>(null); // where labels were last opened or saved, remembered between runs
+  recent = $state<string[]>([]); // recently opened or saved labels, newest first, remembered between runs
 
-  name = $derived(this.path ? this.path.split(/[\\/]/).pop()! : 'Untitled');
+  name = $derived(this.path ? fileName(this.path) : 'Untitled');
   dirty = $derived(this.savedJson !== null && editor.documentJson !== this.savedJson);
 }
 
 export const labelDocument = new LabelDocument();
+
+export const fileName = (path: string) => path.split(/[\\/]/).pop()!;
+export const folderName = (path: string) => path.split(/[\\/]/).slice(-2, -1)[0] ?? '';
+
+// Paths compare without case: Windows paths are case-insensitive, and on Linux two labels
+// differing only in case is rare enough not to matter for this list
+const samePath = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
+
+function addRecent(path: string) {
+  labelDocument.recent = [path, ...labelDocument.recent.filter(p => !samePath(p, path))].slice(0, MAX_RECENT);
+}
+
+function forgetRecent(path: string) {
+  labelDocument.recent = labelDocument.recent.filter(p => !samePath(p, path));
+}
+
+export function clearRecent() {
+  labelDocument.recent = [];
+}
 
 // The current document counts as saved. Run once at startup, after settings are restored.
 export function markStartingDocument() {
@@ -147,6 +168,7 @@ async function writeTo(path: string): Promise<boolean> {
   labelDocument.path = path;
   labelDocument.savedJson = json;
   labelDocument.lastDir = await dirname(path);
+  addRecent(path);
   status.message = { text: `Saved ${labelDocument.name}`, error: false };
   return true;
 }
@@ -156,9 +178,9 @@ export async function saveLabel(): Promise<boolean> {
 }
 
 export async function saveLabelAs(): Promise<boolean> {
-  const fileName = labelDocument.path ? labelDocument.name : `label.${EXTENSION}`;
+  const defaultName = labelDocument.path ? labelDocument.name : `label.${EXTENSION}`;
   const dir = labelDocument.path ? await dirname(labelDocument.path) : labelDocument.lastDir;
-  let path = await save({ defaultPath: dir ? await join(dir, fileName) : fileName, filters: FILTERS });
+  let path = await save({ defaultPath: dir ? await join(dir, defaultName) : defaultName, filters: FILTERS });
   if (!path) return false; // cancelled
   if (!path.toLowerCase().endsWith(`.${EXTENSION}`)) path += `.${EXTENSION}`;
   return writeTo(path);
@@ -169,8 +191,16 @@ export async function openLabel(path?: string) {
   if (!(await settleUnsavedChanges())) return;
   path ??= await open({ multiple: false, directory: false, filters: FILTERS, defaultPath: labelDocument.lastDir ?? undefined }) ?? undefined;
   if (typeof path !== 'string') return; // cancelled
+  let text;
   try {
-    loadFile(await openDocument(path));
+    text = await openDocument(path);
+  } catch (error) {
+    forgetRecent(path); // moved or deleted
+    status.message = { text: String(error), error: true };
+    return;
+  }
+  try {
+    loadFile(text);
   } catch (error) {
     status.message = { text: error instanceof Error ? error.message : String(error), error: true };
     return;
@@ -178,6 +208,7 @@ export async function openLabel(path?: string) {
   labelDocument.path = path;
   labelDocument.savedJson = editor.documentJson;
   labelDocument.lastDir = await dirname(path);
+  addRecent(path);
   status.message = null;
 }
 

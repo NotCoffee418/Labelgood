@@ -1,9 +1,8 @@
 // Edit menu commands: they act on the text being edited, or else on the selected elements.
 // Menu items keep the text box focused (see MenuBar), so the text commands reach it.
-import { copySelection, cutSelection, duplicateSelection, pasteFromMenu } from './clipboard.svelte';
+import { clipboardText, copySelection, cutSelection, duplicateSelection, pasteFromMenu } from './clipboard.svelte';
 import { commit, deleteSelection, editor, redo, undo } from './editor.svelte';
 import { selectAll } from './elements';
-import { status } from './status.svelte';
 
 export const editingText = () => editor.editingBoxId !== null;
 
@@ -32,11 +31,8 @@ export async function editPaste() {
     pasteFromMenu();
     return;
   }
-  try {
-    document.execCommand('insertText', false, await navigator.clipboard.readText());
-  } catch {
-    status.message = { text: 'Use Ctrl+V to paste from other apps.', error: true };
-  }
+  const text = await clipboardText();
+  if (text) document.execCommand('insertText', false, text);
 }
 
 export function editDuplicate() {

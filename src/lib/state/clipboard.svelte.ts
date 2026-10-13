@@ -1,5 +1,6 @@
 // Copy, cut, paste and duplicate. Copied elements are kept here; their images are
 // shared through `images`. Text is also put on the system clipboard.
+import { readImage, readText } from '@tauri-apps/plugin-clipboard-manager';
 import { tick } from 'svelte';
 import { isEditableTarget } from '$lib/dom';
 import type { LabelElement, Point, TextElement } from '$lib/types';
@@ -8,7 +9,6 @@ import { addTextBox, nextId, readImageFile } from './elements';
 import { clampSelection, groupOrigin, moveElement } from './geometry';
 import { help } from './help.svelte';
 import { output } from './output.svelte';
-import { status } from './status.svelte';
 
 const PASTE_OFFSET = 10; // px between repeated pastes
 
@@ -105,17 +105,50 @@ export function handleDocumentPaste(event: ClipboardEvent) {
   }
 }
 
-// Menu paste has no clipboard event: use our elements (at a label position, from the
-// context menu), else try the system text
-export async function pasteFromMenu(at?: Point) {
-  if (copied.length > 0) {
-    pasteElements(at);
-    return;
+// The image on the system clipboard as a PNG file, or null if there's none. Read through
+// Tauri: webviews only hand clipboard images to a paste event.
+async function clipboardImage(): Promise<File | null> {
+  let image;
+  try {
+    image = await readImage();
+  } catch {
+    return null; // no image on the clipboard
   }
   try {
-    const text = await navigator.clipboard.readText();
-    if (text.trim()) addTextBox(text);
+    const [{ width, height }, rgba] = await Promise.all([image.size(), image.rgba()]);
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    canvas.getContext('2d')!.putImageData(new ImageData(new Uint8ClampedArray(rgba), width, height), 0, 0);
+    const blob = await new Promise<Blob | null>(resolve => canvas.toBlob(resolve, 'image/png'));
+    return blob && new File([blob], 'clipboard.png', { type: 'image/png' });
+  } finally {
+    image.close();
+  }
+}
+
+// The text on the system clipboard ('' if there's none)
+export async function clipboardText(): Promise<string> {
+  try {
+    return await readText();
   } catch {
-    status.message = { text: 'Use Ctrl+V to paste from other apps.', error: true };
+    return '';
+  }
+}
+
+// Menu paste has no clipboard event, so it reads the system clipboard itself, in the same
+// order as Ctrl+V: an image, our own elements, then text. From the context menu, `at` is
+// where on the label it goes.
+export async function pasteFromMenu(at?: Point) {
+  const image = await clipboardImage();
+  if (image) {
+    readImageFile(image, at);
+    return;
+  }
+  const text = await clipboardText();
+  if (copied.length > 0 && (text === copiedText || !text.trim())) {
+    pasteElements(at);
+  } else if (text.trim()) {
+    addTextBox(text);
   }
 }

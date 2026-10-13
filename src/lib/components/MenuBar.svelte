@@ -3,7 +3,9 @@
   import { keepTextFocus } from '$lib/dom';
   import { LINKS, checkForUpdates, openLink, showAbout } from '$lib/state/about';
   import { setZoom, zoomToFit } from '$lib/state/canvas.svelte';
-  import { labelDocument, newLabel, openLabel, saveLabel, saveLabelAs } from '$lib/state/document.svelte';
+  import {
+    clearRecent, fileName, folderName, labelDocument, newLabel, openLabel, saveLabel, saveLabelAs,
+  } from '$lib/state/document.svelte';
   import {
     editCopy, editCut, editDelete, editDuplicate, editPaste, editRedo, editSelectAll, editUndo, editingText,
   } from '$lib/state/edit';
@@ -13,7 +15,14 @@
   import { settings } from '$lib/state/settings.svelte';
   import type { Theme } from '$lib/types';
 
-  type Item = { label: string; shortcut?: string; checked?: boolean; disabled?: boolean; action: () => unknown } | 'separator';
+  type Item = {
+    label: string;
+    shortcut?: string; // or a note, shown on the right
+    hint?: string; // tooltip
+    checked?: boolean;
+    disabled?: boolean;
+    action: () => unknown;
+  } | 'separator';
 
   const THEMES: { value: Theme; label: string }[] = [
     { value: 'system', label: 'System theme' },
@@ -36,6 +45,13 @@
           'separator',
           { label: 'Save PDF…', disabled: output.busy, action: savePdf },
           { label: 'Print…', shortcut: 'Ctrl+P', disabled: output.busy, action: openPrintDialog },
+          ...(labelDocument.recent.length > 0 ? [
+            'separator' as const,
+            ...labelDocument.recent.map((path, i): Item => ({
+              label: `${i + 1} ${fileName(path)}`, shortcut: folderName(path), hint: path, action: () => openLabel(path),
+            })),
+            { label: 'Clear Recent Files', action: clearRecent },
+          ] : []),
         ],
       },
       {
@@ -113,7 +129,7 @@
             {#if item === 'separator'}
               <hr />
             {:else}
-              <button role="menuitem" disabled={item.disabled} onmousedown={keepTextFocus} onclick={() => run(item)}>
+              <button role="menuitem" title={item.hint} disabled={item.disabled} onmousedown={keepTextFocus} onclick={() => run(item)}>
                 <span class="check">{item.checked ? '✓' : ''}</span>
                 <span class="item-label">{item.label}</span>
                 <span class="shortcut">{item.shortcut ?? ''}</span>
