@@ -1,14 +1,19 @@
-// Mouse interaction on the canvas: selecting, moving, resizing, panning and the context menu
+// Mouse interaction on the canvas: selecting, moving, resizing, panning, the context menu
+// and dropping image files
 import { MIN_ELEMENT_SIZE, PX_PER_MM } from '$lib/constants';
 import { clampLength } from '$lib/formats';
 import type { LabelElement, LineElement } from '$lib/types';
 import { canvas, pointer } from './canvas.svelte';
 import { commit, deselect, editor, nodes, snapshot, startEditing, stopEditing } from './editor.svelte';
 import { dragArea, elementBounds, groupDelta, lengthForBounds, lengthItem, moveGroup, renderedSize, rotationOf } from './geometry';
+import { readImageFile } from './elements';
 import { label } from './label.svelte';
+import { output } from './output.svelte';
+import { status } from './status.svelte';
 
 // Lines snap to horizontal/vertical within this angle unless Shift is held
 const LINE_SNAP_TOLERANCE = Math.tan(5 * Math.PI / 180);
+const DROP_OFFSET = 10; // px between images dropped together
 
 // Mousedown on the label is prevented (to stop native drag/selection), which also stops
 // focus moving. Release focus from sidebar/toolbar controls so keyboard shortcuts apply.
@@ -260,6 +265,38 @@ export function handleContextMenu(event: MouseEvent) {
     labelX: (event.clientX - rect.left) / canvas.zoom,
     labelY: (event.clientY - rect.top) / canvas.zoom,
   };
+}
+
+// ---- Dropping image files from other apps (anywhere in the window) ----
+
+function isFileDrag(event: DragEvent): boolean {
+  return !!event.dataTransfer?.types.includes('Files');
+}
+
+// Accept file drags; other drags (text moved inside a text box) keep their default
+export function handleDocumentDragOver(event: DragEvent) {
+  if (!isFileDrag(event)) return;
+  event.preventDefault();
+  event.dataTransfer!.dropEffect = 'copy';
+}
+
+// Images dropped on the label are centred where they land, elsewhere they're placed as usual
+export function handleDocumentDrop(event: DragEvent) {
+  if (!isFileDrag(event)) return;
+  event.preventDefault(); // also stops the webview opening the file
+  if (output.printDialog) return;
+  const files = Array.from(event.dataTransfer!.files).filter(f => f.type.startsWith('image/'));
+  if (files.length === 0) {
+    status.message = { text: 'Only image files can be dropped onto the label.', error: true };
+    return;
+  }
+  const rect = canvas.labelEl.getBoundingClientRect();
+  const onLabel = event.clientX >= rect.left && event.clientX <= rect.right
+    && event.clientY >= rect.top && event.clientY <= rect.bottom;
+  files.forEach((file, i) => readImageFile(file, onLabel ? {
+    x: (event.clientX - rect.left) / canvas.zoom + i * DROP_OFFSET,
+    y: (event.clientY - rect.top) / canvas.zoom + i * DROP_OFFSET,
+  } : undefined));
 }
 
 // ---- Moving and releasing (window-wide, so gestures continue outside the canvas) ----

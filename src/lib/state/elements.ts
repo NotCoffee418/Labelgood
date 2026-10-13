@@ -2,6 +2,7 @@
 import { tick } from 'svelte';
 import { BOX_INSET, MIN_ELEMENT_SIZE, PX_PER_MM } from '$lib/constants';
 import { escapeHtml } from '$lib/richtext';
+import type { Point } from '$lib/types';
 import { editor, images, startEditing, stopEditing } from './editor.svelte';
 import { clampElements, clampSelection, elementBounds, insertPosition, printableArea, renderedSize } from './geometry';
 import { status } from './status.svelte';
@@ -55,33 +56,33 @@ export function addRect() {
   editor.selectedIds = [id];
 }
 
-export function readImageFile(file: File) {
+// Inserts an image file; with `at` (a label position, e.g. where it was dropped) it's centred there
+export function readImageFile(file: File, at?: Point) {
   const reader = new FileReader();
   reader.onload = () => {
     const src = reader.result as string;
     const img = new Image();
-    img.onload = () => insertImage(src, img.naturalWidth, img.naturalHeight);
+    img.onload = () => insertImage(src, img.naturalWidth, img.naturalHeight, at);
     img.onerror = () => status.message = { text: `Couldn't read ${file.name} as an image.`, error: true };
     img.src = src;
   };
   reader.readAsDataURL(file);
 }
 
-function insertImage(src: string, naturalWidth: number, naturalHeight: number) {
+function insertImage(src: string, naturalWidth: number, naturalHeight: number, at?: Point) {
   stopEditing();
   const imageId = `img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   images.set(imageId, { src, width: naturalWidth, height: naturalHeight });
   // Fit inside the printable area, keeping the image's proportions
   const area = printableArea(0);
   const scale = Math.min(1, (area.maxX - area.minX) / naturalWidth, (area.maxY - area.minY) / naturalHeight);
+  const w = Math.max(MIN_ELEMENT_SIZE, Math.round(naturalWidth * scale));
+  const h = Math.max(MIN_ELEMENT_SIZE, Math.round(naturalHeight * scale));
+  const pos = at ? { x: Math.round(at.x - w / 2), y: Math.round(at.y - h / 2) } : insertPosition(0);
   const id = nextId();
-  editor.elements.push({
-    kind: 'image', id, ...insertPosition(0),
-    w: Math.max(MIN_ELEMENT_SIZE, Math.round(naturalWidth * scale)),
-    h: Math.max(MIN_ELEMENT_SIZE, Math.round(naturalHeight * scale)),
-    imageId,
-  });
+  editor.elements.push({ kind: 'image', id, ...pos, w, h, imageId });
   editor.selectedIds = [id];
+  if (at) clampSelection();
 }
 
 // Restores an image's original proportions, keeping its width

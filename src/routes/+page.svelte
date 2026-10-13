@@ -13,6 +13,7 @@
   import { initSampleBox } from '$lib/state/elements';
   import { loadFonts } from '$lib/state/fonts.svelte';
   import { handleSelectionChange } from '$lib/state/formatting';
+  import { handleDocumentDragOver, handleDocumentDrop } from '$lib/state/gestures';
   import { help } from '$lib/state/help.svelte';
   import { loadPrinters, output } from '$lib/state/output.svelte';
   import { applyTheme, loadSettings, persistSettings } from '$lib/state/settings.svelte';
@@ -42,6 +43,8 @@
   onselectionchange={handleSelectionChange}
   onpaste={handleDocumentPaste}
   oncontextmenu={handleDocumentContextMenu}
+  ondragover={handleDocumentDragOver}
+  ondrop={handleDocumentDrop}
 />
 
 <div class="app-container">
