@@ -1,11 +1,11 @@
 <!-- The second toolbar row: shape, image or text formatting, depending on the selection -->
 <script lang="ts">
-  import { keepTextFocus } from '$lib/dom';
-  import { FALLBACK_FONTS, GENERIC_FONTS } from '$lib/fonts';
-  import { editor } from '$lib/state/editor.svelte';
-  import { resetImageRatio } from '$lib/state/elements';
-  import { fonts, genericFontLabel } from '$lib/state/fonts.svelte';
-  import { applyFormat, applyShape, toggleFormat } from '$lib/state/formatting';
+  import { keepTextFocus } from '#lib/dom.ts';
+  import { FALLBACK_FONTS, GENERIC_FONTS } from '#lib/fonts.ts';
+  import { editor } from '#lib/state/editor.svelte.ts';
+  import { resetImageRatio } from '#lib/state/elements.ts';
+  import { fonts, genericFontLabel } from '#lib/state/fonts.svelte.ts';
+  import { applyFormat, applyShape, toggleFormat } from '#lib/state/formatting.ts';
 
   const MARKS = [['bold', 'Bold'], ['italic', 'Italic'], ['underline', 'Underline']] as const;
   const ALIGNMENTS =[['left', 'Align left'], ['center', 'Center'], ['right', 'Align right']] as const;

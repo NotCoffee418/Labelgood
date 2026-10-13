@@ -1,15 +1,15 @@
 <!-- One element on the label, with its selection handles -->
 <script lang="ts">
-  import { BOX_INSET, PX_PER_MM } from '$lib/constants';
-  import { cssFontFamily } from '$lib/fonts';
-  import { clampLength } from '$lib/formats';
-  import { pastePlainText } from '$lib/richtext';
-  import { canvas, pointer } from '$lib/state/canvas.svelte';
-  import { editor, images, registerEditor, registerNode, updateTextHtml } from '$lib/state/editor.svelte';
-  import { rotationOf } from '$lib/state/geometry';
-  import { handleElementMouseDown, startElementResize, startEndpointDrag } from '$lib/state/gestures';
-  import { label } from '$lib/state/label.svelte';
-  import type { LabelElement } from '$lib/types';
+  import { BOX_INSET, PX_PER_MM } from '#lib/constants.ts';
+  import { cssFontFamily } from '#lib/fonts.ts';
+  import { clampLength } from '#lib/formats.ts';
+  import { pastePlainText } from '#lib/richtext.ts';
+  import { canvas, pointer } from '#lib/state/canvas.svelte.ts';
+  import { editor, images, registerEditor, registerNode, updateTextHtml } from '#lib/state/editor.svelte.ts';
+  import { rotationOf } from '#lib/state/geometry.ts';
+  import { handleElementMouseDown, startElementResize, startEndpointDrag } from '#lib/state/gestures.ts';
+  import { label } from '#lib/state/label.svelte.ts';
+  import type { LabelElement } from '#lib/types.ts';
 
   const LINE_HIT_AREA = 10; // px, clickable thickness of a line
 

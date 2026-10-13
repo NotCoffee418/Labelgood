@@ -25,16 +25,16 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-tempfile = "3.8"
-base64 = "0.22"
+tempfile = "3.27"
+base64 = "0.23"
 tauri-plugin-clipboard-manager = "2"
 tauri-plugin-dialog = "2"
 tauri-plugin-opener = "2"
 tauri-plugin-window-state = "2"
 
-png = "0.17"
+png = "0.18"
 flate2 = "1"
-roxmltree = "0.20"
+roxmltree = "0.21"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [

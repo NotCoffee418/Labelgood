@@ -1,6 +1,6 @@
 // Element positions and sizes on the label, and keeping elements inside the margins
-import { BOX_INSET, PX_PER_MM } from '$lib/constants';
-import type { Area, Bounds, BoxElement, LabelElement, Point } from '$lib/types';
+import { BOX_INSET, PX_PER_MM } from '#lib/constants.ts';
+import type { Area, Bounds, BoxElement, LabelElement, Point } from '#lib/types.ts';
 import { canvas } from './canvas.svelte';
 import { editor, nodes, snapshot } from './editor.svelte';
 import { label } from './label.svelte';

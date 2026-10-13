@@ -2,7 +2,7 @@
 //! Replaces shelling out to ImageMagick, so printing needs no external tools.
 
 use flate2::{write::ZlibEncoder, Compression};
-use std::io::Write;
+use std::io::{Cursor, Write};
 
 /// 8-bit RGB pixels, row by row from the top
 pub struct RgbImage {
@@ -13,10 +13,11 @@ pub struct RgbImage {
 
 /// Decodes a PNG into RGB, compositing any transparency onto white (paper)
 pub fn decode_png(bytes: &[u8]) -> Result<RgbImage, String> {
-    let mut decoder = png::Decoder::new(bytes);
+    let mut decoder = png::Decoder::new(Cursor::new(bytes));
     decoder.set_transformations(png::Transformations::EXPAND | png::Transformations::STRIP_16);
     let mut reader = decoder.read_info().map_err(|e| format!("Invalid PNG: {}", e))?;
-    let mut buffer = vec![0; reader.output_buffer_size()];
+    let size = reader.output_buffer_size().ok_or("PNG is too large to decode")?;
+    let mut buffer = vec![0; size];
     let info = reader.next_frame(&mut buffer).map_err(|e| format!("Invalid PNG: {}", e))?;
     let data = &buffer[..info.buffer_size()];
 

@@ -1,6 +1,6 @@
 // The formatting toolbar: text styles (per selection or per box) and shape styles
-import { clearInlineFormat, formatRange, styleAtRange } from '$lib/richtext';
-import type { ShapeStyle, TextElement, TextStyle } from '$lib/types';
+import { clearInlineFormat, formatRange, styleAtRange } from '#lib/richtext.ts';
+import type { ShapeStyle, TextElement, TextStyle } from '#lib/types.ts';
 import { editor, editors } from './editor.svelte';
 
 // Tracks the text selected in the box being edited, so the toolbar can show and format it

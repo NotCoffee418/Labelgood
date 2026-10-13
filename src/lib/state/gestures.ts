@@ -1,10 +1,10 @@
 // Mouse interaction on the canvas: selecting, moving, resizing, panning, the context menu,
 // and files dropped onto the window
 import { getCurrentWebview } from '@tauri-apps/api/webview';
-import { readImageBytes } from '$lib/commands';
-import { MIN_ELEMENT_SIZE, PX_PER_MM } from '$lib/constants';
-import { clampLength } from '$lib/formats';
-import type { LabelElement, LineElement } from '$lib/types';
+import { readImageBytes } from '#lib/commands.ts';
+import { MIN_ELEMENT_SIZE, PX_PER_MM } from '#lib/constants.ts';
+import { clampLength } from '#lib/formats.ts';
+import type { LabelElement, LineElement } from '#lib/types.ts';
 import { canvas, pointer } from './canvas.svelte';
 import { fileName, openLabel } from './document.svelte';
 import { commit, deselect, editor, nodes, snapshot, startEditing, stopEditing } from './editor.svelte';

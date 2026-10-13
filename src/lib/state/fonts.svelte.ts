@@ -1,4 +1,4 @@
-import { getDefaultFonts, listFonts } from '$lib/commands';
+import { getDefaultFonts, listFonts } from '#lib/commands.ts';
 
 // The fonts installed on this system
 class Fonts {

@@ -1,10 +1,10 @@
 <!-- Right-click menu on the canvas, opened by handleContextMenu in gestures.ts -->
 <script lang="ts">
-  import { canvas } from '$lib/state/canvas.svelte';
-  import { copySelection, cutSelection, duplicateSelection, pasteFromMenu } from '$lib/state/clipboard.svelte';
-  import { commit, deleteSelection, editor } from '$lib/state/editor.svelte';
-  import { bringToFront, rotateSelection, selectAll, sendToBack } from '$lib/state/elements';
-  import type { Point } from '$lib/types';
+  import { canvas } from '#lib/state/canvas.svelte.ts';
+  import { copySelection, cutSelection, duplicateSelection, pasteFromMenu } from '#lib/state/clipboard.svelte.ts';
+  import { commit, deleteSelection, editor } from '#lib/state/editor.svelte.ts';
+  import { bringToFront, rotateSelection, selectAll, sendToBack } from '#lib/state/elements.ts';
+  import type { Point } from '#lib/types.ts';
 
   // Runs a menu item, passing the label position the menu was opened at
   function menuAction(action: (at: Point) => void) {

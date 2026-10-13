@@ -1,5 +1,5 @@
-import { ALL_FORMATS, DEFAULT_MARGIN_ENDS, DEFAULT_MARGIN_SIDES, clampLength } from '$lib/formats';
-import type { MarginMode, Margins, Orientation } from '$lib/types';
+import { ALL_FORMATS, DEFAULT_MARGIN_ENDS, DEFAULT_MARGIN_SIDES, clampLength } from '#lib/formats.ts';
+import type { MarginMode, Margins, Orientation } from '#lib/types.ts';
 
 // The label's size, orientation and margins, and how it's laid out on screen
 class LabelSetup {

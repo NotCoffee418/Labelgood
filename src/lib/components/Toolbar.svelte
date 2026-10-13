@@ -1,8 +1,8 @@
 <!-- Toolbar: history, inserts and actions on the selection, then formatting -->
 <script lang="ts">
-  import { keepTextFocus } from '$lib/dom';
-  import { commit, deleteSelection, editor, history, redo, undo } from '$lib/state/editor.svelte';
-  import { addLine, addRect, addTextBox, readImageFile, rotateSelection } from '$lib/state/elements';
+  import { keepTextFocus } from '#lib/dom.ts';
+  import { commit, deleteSelection, editor, history, redo, undo } from '#lib/state/editor.svelte.ts';
+  import { addLine, addRect, addTextBox, readImageFile, rotateSelection } from '#lib/state/elements.ts';
   import FormatControls from './FormatControls.svelte';
 
   let imageInput: HTMLInputElement;

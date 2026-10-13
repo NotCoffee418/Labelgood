@@ -7,8 +7,8 @@
 import { dirname, join } from '@tauri-apps/api/path';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { message, open, save } from '@tauri-apps/plugin-dialog';
-import { openDocument, openedFile, saveDocument } from '$lib/commands';
-import type { LabelElement } from '$lib/types';
+import { openDocument, openedFile, saveDocument } from '#lib/commands.ts';
+import type { LabelElement } from '#lib/types.ts';
 import { editor, images, replaceDocument } from './editor.svelte';
 import { label } from './label.svelte';
 import { status } from './status.svelte';

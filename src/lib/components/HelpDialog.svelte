@@ -1,6 +1,6 @@
 <!-- Mouse and keyboard reference. Shown while help.open is set. -->
 <script lang="ts">
-  import { help } from '$lib/state/help.svelte';
+  import { help } from '#lib/state/help.svelte.ts';
 
   const SECTIONS: { title: string; rows: [keys: string, action: string][] }[] = [
     {

@@ -1,7 +1,7 @@
 <script lang="ts">
-  import { help } from '$lib/state/help.svelte';
-  import { settings } from '$lib/state/settings.svelte';
-  import type { Theme } from '$lib/types';
+  import { help } from '#lib/state/help.svelte.ts';
+  import { settings } from '#lib/state/settings.svelte.ts';
+  import type { Theme } from '#lib/types.ts';
   import Segmented from './Segmented.svelte';
 
   const THEMES: { value: Theme; label: string }[] = [

@@ -1,7 +1,7 @@
 <!-- Wavy edge drawn just outside the label where a continuous label is cut off the roll -->
 <script lang="ts">
-  import { PX_PER_MM } from '$lib/constants';
-  import { label } from '$lib/state/label.svelte';
+  import { PX_PER_MM } from '#lib/constants.ts';
+  import { label } from '#lib/state/label.svelte.ts';
 
   // One continuous path along the cut edge (a tiled pattern shows seams). Drawn
   // across x (0 = label edge) and along y; swapped for a bottom edge.

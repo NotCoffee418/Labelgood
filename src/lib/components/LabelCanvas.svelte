@@ -1,13 +1,13 @@
 <!-- The scrollable, zoomable area showing the label being edited -->
 <script lang="ts">
   import { tick } from 'svelte';
-  import { canvas, pointer, setZoom } from '$lib/state/canvas.svelte';
-  import { editor } from '$lib/state/editor.svelte';
-  import { measureContentLength } from '$lib/state/geometry';
+  import { canvas, pointer, setZoom } from '#lib/state/canvas.svelte.ts';
+  import { editor } from '#lib/state/editor.svelte.ts';
+  import { measureContentLength } from '#lib/state/geometry.ts';
   import {
     handleCanvasDblClick, handleCanvasMouseDown, handleContextMenu, handleGlobalMouseMove, handleMouseUp, startLabelResize,
-  } from '$lib/state/gestures';
-  import { label } from '$lib/state/label.svelte';
+  } from '#lib/state/gestures.ts';
+  import { label } from '#lib/state/label.svelte.ts';
   import CanvasElement from './CanvasElement.svelte';
   import CutEdge from './CutEdge.svelte';
   import ZoomBar from './ZoomBar.svelte';

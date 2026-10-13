@@ -3,33 +3,34 @@
   "version": "0.0.0",
   "description": "Label editor and printer",
   "type": "module",
+  "imports": {
+    "#lib/*": "./src/lib/*"
+  },
   "scripts": {
     "dev": "vite dev",
     "build": "vite build",
     "preview": "vite preview",
+    "prepare": "svelte-kit sync || echo \"\"",
     "check": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json",
     "check:watch": "svelte-kit sync && svelte-check --tsconfig ./tsconfig.json --watch",
     "tauri": "tauri"
   },
   "license": "MIT",
   "dependencies": {
-    "@tauri-apps/api": "^2",
+    "@tauri-apps/api": "^2.12.3",
     "@tauri-apps/plugin-clipboard-manager": "^2.4.2",
     "@tauri-apps/plugin-dialog": "^2.8.2",
     "@tauri-apps/plugin-opener": "^2.7.1",
     "html2canvas": "^1.4.1"
   },
   "devDependencies": {
-    "@sveltejs/adapter-static": "^3.0.6",
+    "@sveltejs/adapter-static": "^4.0.0",
     "@sveltejs/kit": "^3.0.1",
-    "@sveltejs/vite-plugin-svelte": "^5.0.0",
-    "@tauri-apps/cli": "^2",
-    "svelte": "^5.0.0",
-    "svelte-check": "^4.0.0",
-    "typescript": "~5.6.2",
-    "vite": "^6.0.3"
-  },
-  "allowScripts": {
-    "esbuild@0.25.12": true
+    "@sveltejs/vite-plugin-svelte": "^7.3.1",
+    "@tauri-apps/cli": "^2.12.2",
+    "svelte": "^5.57.2",
+    "svelte-check": "^4.7.6",
+    "typescript": "~6.0.3",
+    "vite": "^8.3.4"
   }
 }

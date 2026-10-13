@@ -1,6 +1,6 @@
 import { tick } from 'svelte';
-import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM, PX_PER_MM } from '$lib/constants';
-import type { Area, Bounds, LabelElement, Point } from '$lib/types';
+import { DEFAULT_ZOOM, MAX_ZOOM, MIN_ZOOM, PX_PER_MM } from '#lib/constants.ts';
+import type { Area, Bounds, LabelElement, Point } from '#lib/types.ts';
 import { label } from './label.svelte';
 
 // The editing area: zoom, its DOM elements and the context menu

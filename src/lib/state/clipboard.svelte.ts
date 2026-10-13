@@ -2,8 +2,8 @@
 // shared through `images`. Text is also put on the system clipboard.
 import { readImage, readText } from '@tauri-apps/plugin-clipboard-manager';
 import { tick } from 'svelte';
-import { isEditableTarget } from '$lib/dom';
-import type { LabelElement, Point, TextElement } from '$lib/types';
+import { isEditableTarget } from '#lib/dom.ts';
+import type { LabelElement, Point, TextElement } from '#lib/types.ts';
 import { commit, deleteSelection, editor, editors, snapshot, stopEditing } from './editor.svelte';
 import { addTextBox, nextId, readImageFile } from './elements';
 import { clampSelection, groupOrigin, moveElement } from './geometry';

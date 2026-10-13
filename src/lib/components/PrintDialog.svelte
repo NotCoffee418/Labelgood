@@ -1,10 +1,10 @@
 <!-- Print preview, printer and driver options. Shown while output.printDialog is set. -->
 <script lang="ts">
-  import { label } from '$lib/state/label.svelte';
+  import { label } from '#lib/state/label.svelte.ts';
   import {
     choiceFor, clampCopies, closePrintDialog, hasPrintChoices, loadPrinterOptions, output, printFromDialog, refreshPrinters,
     resetPrintChoices, setChoice,
-  } from '$lib/state/output.svelte';
+  } from '#lib/state/output.svelte.ts';
 
   let { preview }: { preview: string } = $props();
 

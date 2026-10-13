@@ -1,6 +1,6 @@
 import { tick } from 'svelte';
-import { caretRangeAt, type RangeStyle } from '$lib/richtext';
-import type { LabelElement, LineElement, RectElement, ShapeStyle, TextElement, TextStyle } from '$lib/types';
+import { caretRangeAt, type RangeStyle } from '#lib/richtext.ts';
+import type { LabelElement, LineElement, RectElement, ShapeStyle, TextElement, TextStyle } from '#lib/types.ts';
 import { isChangingDocument } from './canvas.svelte';
 import { History } from './history.svelte';
 import { label } from './label.svelte';

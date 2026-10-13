@@ -1,9 +1,9 @@
 // Printing and saving as PDF
 import { dirname, join } from '@tauri-apps/api/path';
 import { save } from '@tauri-apps/plugin-dialog';
-import { generatePdf, getPrinterOptions, listPrinters } from '$lib/commands';
-import { renderLabelPng } from '$lib/render';
-import type { PrinterOption } from '$lib/types';
+import { generatePdf, getPrinterOptions, listPrinters } from '#lib/commands.ts';
+import { renderLabelPng } from '#lib/render.ts';
+import type { PrinterOption } from '#lib/types.ts';
 import { canvas } from './canvas.svelte';
 import { stopEditing } from './editor.svelte';
 import { label } from './label.svelte';

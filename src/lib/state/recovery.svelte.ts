@@ -6,7 +6,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { message } from '@tauri-apps/plugin-dialog';
 import {
   type RecoveryEntry, recoveryClear, recoveryDiscard, recoveryDiscardAll, recoveryList, recoveryRead, recoveryWrite,
-} from '$lib/commands';
+} from '#lib/commands.ts';
 import { fileContents, fileName, labelDocument, restoreDocument, settleUnsavedChanges } from './document.svelte';
 import { editor } from './editor.svelte';
 import { status } from './status.svelte';

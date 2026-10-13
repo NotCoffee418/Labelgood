@@ -1,25 +1,25 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import ContextMenu from '$lib/components/ContextMenu.svelte';
-  import HelpDialog from '$lib/components/HelpDialog.svelte';
-  import LabelCanvas from '$lib/components/LabelCanvas.svelte';
-  import MenuBar from '$lib/components/MenuBar.svelte';
-  import PrintDialog from '$lib/components/PrintDialog.svelte';
-  import SettingsPanel from '$lib/components/SettingsPanel.svelte';
-  import Toolbar from '$lib/components/Toolbar.svelte';
-  import { isEditableTarget } from '$lib/dom';
-  import { handleDocumentPaste } from '$lib/state/clipboard.svelte';
-  import { markStartingDocument, openStartupFile, trackAutoSave, trackDocumentWindow } from '$lib/state/document.svelte';
-  import { history } from '$lib/state/editor.svelte';
-  import { initSampleBox } from '$lib/state/elements';
-  import { loadFonts } from '$lib/state/fonts.svelte';
-  import { handleSelectionChange } from '$lib/state/formatting';
-  import { listenForFileDrops } from '$lib/state/gestures';
-  import { help } from '$lib/state/help.svelte';
-  import { loadPrinters, output } from '$lib/state/output.svelte';
-  import { offerRecovery, trackRecovery } from '$lib/state/recovery.svelte';
-  import { applyTheme, loadSettings, persistSettings } from '$lib/state/settings.svelte';
-  import { handleKeyDown, handleKeyUp } from '$lib/state/shortcuts';
+  import ContextMenu from '#lib/components/ContextMenu.svelte';
+  import HelpDialog from '#lib/components/HelpDialog.svelte';
+  import LabelCanvas from '#lib/components/LabelCanvas.svelte';
+  import MenuBar from '#lib/components/MenuBar.svelte';
+  import PrintDialog from '#lib/components/PrintDialog.svelte';
+  import SettingsPanel from '#lib/components/SettingsPanel.svelte';
+  import Toolbar from '#lib/components/Toolbar.svelte';
+  import { isEditableTarget } from '#lib/dom.ts';
+  import { handleDocumentPaste } from '#lib/state/clipboard.svelte.ts';
+  import { markStartingDocument, openStartupFile, trackAutoSave, trackDocumentWindow } from '#lib/state/document.svelte.ts';
+  import { history } from '#lib/state/editor.svelte.ts';
+  import { initSampleBox } from '#lib/state/elements.ts';
+  import { loadFonts } from '#lib/state/fonts.svelte.ts';
+  import { handleSelectionChange } from '#lib/state/formatting.ts';
+  import { listenForFileDrops } from '#lib/state/gestures.ts';
+  import { help } from '#lib/state/help.svelte.ts';
+  import { loadPrinters, output } from '#lib/state/output.svelte.ts';
+  import { offerRecovery, trackRecovery } from '#lib/state/recovery.svelte.ts';
+  import { applyTheme, loadSettings, persistSettings } from '#lib/state/settings.svelte.ts';
+  import { handleKeyDown, handleKeyUp } from '#lib/state/shortcuts.ts';
 
   // Restore the last used settings before anything is recorded or saved
   loadSettings();

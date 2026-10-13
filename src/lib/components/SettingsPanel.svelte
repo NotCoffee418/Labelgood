@@ -1,13 +1,13 @@
 <!-- Sidebar: label size, margins, orientation, and the output buttons -->
 <script lang="ts">
   import { tick } from 'svelte';
-  import { LABEL_FORMATS, MAX_LENGTH_MM, MIN_LENGTH_MM, clampLength } from '$lib/formats';
+  import { LABEL_FORMATS, MAX_LENGTH_MM, MIN_LENGTH_MM, clampLength } from '#lib/formats.ts';
   import {
     handleContinuousHeight, handleContinuousWidth, label, selectLabelFormat, setMarginMode,
-  } from '$lib/state/label.svelte';
-  import { openPrintDialog, output, savePdf } from '$lib/state/output.svelte';
-  import { status } from '$lib/state/status.svelte';
-  import type { MarginMode, Orientation } from '$lib/types';
+  } from '#lib/state/label.svelte.ts';
+  import { openPrintDialog, output, savePdf } from '#lib/state/output.svelte.ts';
+  import { status } from '#lib/state/status.svelte.ts';
+  import type { MarginMode, Orientation } from '#lib/types.ts';
   import Segmented from './Segmented.svelte';
 
   const MARGIN_MODES: { value: MarginMode; label: string }[] = [

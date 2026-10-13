@@ -1,7 +1,7 @@
 // Settings remembered between runs, and the theme
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { MAX_ZOOM, MIN_ZOOM } from '$lib/constants';
-import type { MarginMode, Theme } from '$lib/types';
+import { MAX_ZOOM, MIN_ZOOM } from '#lib/constants.ts';
+import type { MarginMode, Theme } from '#lib/types.ts';
 import { canvas } from './canvas.svelte';
 import { labelDocument } from './document.svelte';
 import { editor } from './editor.svelte';

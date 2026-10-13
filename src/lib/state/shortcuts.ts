@@ -1,5 +1,5 @@
 // Keyboard shortcuts
-import { isEditableTarget } from '$lib/dom';
+import { isEditableTarget } from '#lib/dom.ts';
 import { canvas, pointer } from './canvas.svelte';
 import { copySelection, cutSelection, duplicateSelection } from './clipboard.svelte';
 import { newLabel, openLabel, saveLabel, saveLabelAs } from './document.svelte';

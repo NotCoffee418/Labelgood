@@ -1,8 +1,8 @@
 // Adding, arranging and rotating elements
 import { tick } from 'svelte';
-import { BOX_INSET, MIN_ELEMENT_SIZE, PX_PER_MM } from '$lib/constants';
-import { escapeHtml } from '$lib/richtext';
-import type { Point } from '$lib/types';
+import { BOX_INSET, MIN_ELEMENT_SIZE, PX_PER_MM } from '#lib/constants.ts';
+import { escapeHtml } from '#lib/richtext.ts';
+import type { Point } from '#lib/types.ts';
 import { editor, history, images, startEditing, stopEditing } from './editor.svelte';
 import { clampElements, clampSelection, elementBounds, insertPosition, printableArea, renderedSize } from './geometry';
 import { status } from './status.svelte';

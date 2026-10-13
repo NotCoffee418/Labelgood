@@ -1,22 +1,22 @@
 <!-- The menu bar: file commands, view settings and help, and the open file's name -->
 <script lang="ts">
-  import { keepTextFocus } from '$lib/dom';
-  import { LINKS, checkForUpdates, openLink, showAbout } from '$lib/state/about';
-  import { setZoom, zoomToFit } from '$lib/state/canvas.svelte';
+  import { keepTextFocus } from '#lib/dom.ts';
+  import { LINKS, checkForUpdates, openLink, showAbout } from '#lib/state/about.ts';
+  import { setZoom, zoomToFit } from '#lib/state/canvas.svelte.ts';
   import {
     clearRecent, fileName, folderName, labelDocument, newLabel, openLabel, saveLabel, saveLabelAs,
-  } from '$lib/state/document.svelte';
+  } from '#lib/state/document.svelte.ts';
   import {
     discardAllRecovery, entryName, entryTime, recovery, refreshRecovery, restoreRecovery,
-  } from '$lib/state/recovery.svelte';
+  } from '#lib/state/recovery.svelte.ts';
   import {
     editCopy, editCut, editDelete, editDuplicate, editPaste, editRedo, editSelectAll, editUndo, editingText,
-  } from '$lib/state/edit';
-  import { editor, history } from '$lib/state/editor.svelte';
-  import { help } from '$lib/state/help.svelte';
-  import { openPrintDialog, output, savePdf } from '$lib/state/output.svelte';
-  import { settings } from '$lib/state/settings.svelte';
-  import type { Theme } from '$lib/types';
+  } from '#lib/state/edit.ts';
+  import { editor, history } from '#lib/state/editor.svelte.ts';
+  import { help } from '#lib/state/help.svelte.ts';
+  import { openPrintDialog, output, savePdf } from '#lib/state/output.svelte.ts';
+  import { settings } from '#lib/state/settings.svelte.ts';
+  import type { Theme } from '#lib/types.ts';
 
   type Item = {
     label: string;

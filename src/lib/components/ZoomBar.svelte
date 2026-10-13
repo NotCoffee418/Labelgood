@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { canvas, setZoom, zoomFromSlider, zoomToFit } from '$lib/state/canvas.svelte';
+  import { canvas, setZoom, zoomFromSlider, zoomToFit } from '#lib/state/canvas.svelte.ts';
 </script>
 
 <div class="zoom-bar">
