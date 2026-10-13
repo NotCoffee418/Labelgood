@@ -6,6 +6,7 @@ import type { LabelElement, Point, TextElement } from '$lib/types';
 import { commit, deleteSelection, editor, editors, snapshot, stopEditing } from './editor.svelte';
 import { addTextBox, nextId, readImageFile } from './elements';
 import { clampSelection, groupOrigin, moveElement } from './geometry';
+import { help } from './help.svelte';
 import { output } from './output.svelte';
 import { status } from './status.svelte';
 
@@ -85,7 +86,7 @@ export function duplicateSelection() {
 
 // Ctrl+V outside text fields: our own elements, an image, or text as a new text box
 export function handleDocumentPaste(event: ClipboardEvent) {
-  if (output.printDialog) return;
+  if (output.printDialog || help.open) return;
   if (isEditableTarget(event.target)) return;
   event.preventDefault();
   const data = event.clipboardData;

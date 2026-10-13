@@ -291,6 +291,7 @@
 
   :global(.label-preview.capturing) .element {
     opacity: 1;
+    outline: none;
   }
 
   :global(.label-preview.capturing) .line-bar {

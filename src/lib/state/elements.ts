@@ -3,7 +3,7 @@ import { tick } from 'svelte';
 import { BOX_INSET, MIN_ELEMENT_SIZE, PX_PER_MM } from '$lib/constants';
 import { escapeHtml } from '$lib/richtext';
 import type { Point } from '$lib/types';
-import { editor, images, startEditing, stopEditing } from './editor.svelte';
+import { editor, history, images, startEditing, stopEditing } from './editor.svelte';
 import { clampElements, clampSelection, elementBounds, insertPosition, printableArea, renderedSize } from './geometry';
 import { status } from './status.svelte';
 
@@ -11,12 +11,15 @@ export function nextId() {
   return Math.max(0, ...editor.elements.map(el => el.id)) + 1;
 }
 
-// Start the sample box with the restored default formatting, at the margins
+// Start the sample box with the restored default formatting, at the margins. Only on
+// an untouched document: the page re-runs this when it hot-reloads during development.
 export function initSampleBox() {
   const sample = editor.elements[0];
-  if (sample.kind !== 'text') return;
+  if (editor.elements.length !== 1 || sample.kind !== 'text' || history.canUndo || history.canRedo) return;
   sample.style = { ...editor.defaultStyle };
-  Object.assign(sample, insertPosition(BOX_INSET));
+  const area = printableArea(BOX_INSET);
+  sample.x = Math.round(area.minX);
+  sample.y = Math.round(area.minY);
 }
 
 // Adds a text box; with `text` (e.g. pasted) it's just placed, otherwise it opens for typing
@@ -69,8 +72,12 @@ export function readImageFile(file: File, at?: Point) {
   reader.readAsDataURL(file);
 }
 
+const UNSIZED_IMAGE = 100; // px, for images without a size of their own (some SVGs)
+
 function insertImage(src: string, naturalWidth: number, naturalHeight: number, at?: Point) {
   stopEditing();
+  naturalWidth ||= UNSIZED_IMAGE;
+  naturalHeight ||= UNSIZED_IMAGE;
   const imageId = `img-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   images.set(imageId, { src, width: naturalWidth, height: naturalHeight });
   // Fit inside the printable area, keeping the image's proportions

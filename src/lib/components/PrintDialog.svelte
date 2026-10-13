@@ -101,7 +101,7 @@
     {/if}
     <div class="dialog-actions">
       <button class="secondary-button" onclick={closePrintDialog} disabled={output.printing}>Cancel</button>
-      <button class="print-button" onclick={printFromDialog} disabled={output.printing || !output.selectedPrinter}>
+      <button class="print-button" onclick={printFromDialog} disabled={output.printing || !output.selectedPrinter || output.printerOptions === null}>
         {output.printing ? 'Printing…' : 'Print'}
       </button>
     </div>

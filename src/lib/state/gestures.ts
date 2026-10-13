@@ -7,6 +7,7 @@ import { canvas, pointer } from './canvas.svelte';
 import { commit, deselect, editor, nodes, snapshot, startEditing, stopEditing } from './editor.svelte';
 import { dragArea, elementBounds, groupDelta, lengthForBounds, lengthItem, moveGroup, renderedSize, rotationOf } from './geometry';
 import { readImageFile } from './elements';
+import { help } from './help.svelte';
 import { label } from './label.svelte';
 import { output } from './output.svelte';
 import { status } from './status.svelte';
@@ -284,7 +285,7 @@ export function handleDocumentDragOver(event: DragEvent) {
 export function handleDocumentDrop(event: DragEvent) {
   if (!isFileDrag(event)) return;
   event.preventDefault(); // also stops the webview opening the file
-  if (output.printDialog) return;
+  if (output.printDialog || help.open) return;
   const files = Array.from(event.dataTransfer!.files).filter(f => f.type.startsWith('image/'));
   if (files.length === 0) {
     status.message = { text: 'Only image files can be dropped onto the label.', error: true };
