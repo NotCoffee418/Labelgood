@@ -14,8 +14,9 @@
     "windows": [
       {
         "title": "Labelgood",
-        "width": 1024,
-        "height": 600,
+        "width": 1280,
+        "height": 1024,
+        "center": true,
         "minWidth": 1024,
         "minHeight": 600,
         "dragDropEnabled": false

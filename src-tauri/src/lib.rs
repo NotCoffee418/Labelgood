@@ -2,6 +2,7 @@ use base64::Engine;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
+use tauri_plugin_window_state::StateFlags;
 
 mod pdf;
 mod print_schema;
@@ -137,6 +138,13 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // Reopen at the last window size (and maximised if it was); position isn't kept,
+        // so the window can't come back on a monitor that's no longer there
+        .plugin(
+            tauri_plugin_window_state::Builder::default()
+                .with_state_flags(StateFlags::SIZE | StateFlags::MAXIMIZED)
+                .build(),
+        )
         .invoke_handler(tauri::generate_handler![generate_pdf, list_printers, printer_options, list_fonts, default_fonts])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
