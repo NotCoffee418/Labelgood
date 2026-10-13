@@ -2,6 +2,7 @@
 import { isEditableTarget } from '$lib/dom';
 import { canvas, pointer } from './canvas.svelte';
 import { copySelection, cutSelection, duplicateSelection } from './clipboard.svelte';
+import { newLabel, openLabel, saveLabel, saveLabelAs } from './document.svelte';
 import { deleteSelection, editor, redo, snapshot, startEditing, stopEditing, undo } from './editor.svelte';
 import { rotateSelection, selectAll } from './elements';
 import { moveGroup } from './geometry';
@@ -24,6 +25,19 @@ export function handleKeyDown(event: KeyboardEvent) {
   if (output.printDialog) {
     if (event.key === 'Escape') closePrintDialog();
     return;
+  }
+  // File commands work anywhere, including while typing
+  if ((event.ctrlKey || event.metaKey) && !event.altKey) {
+    const key = event.key.toLowerCase();
+    const command = key === 'n' ? newLabel
+      : key === 'o' ? openLabel
+      : key === 's' ? (event.shiftKey ? saveLabelAs : saveLabel)
+      : null;
+    if (command) {
+      event.preventDefault();
+      command();
+      return;
+    }
   }
   if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 'p') {
     event.preventDefault();

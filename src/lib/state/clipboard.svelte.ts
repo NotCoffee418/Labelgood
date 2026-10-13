@@ -105,8 +105,9 @@ export function handleDocumentPaste(event: ClipboardEvent) {
   }
 }
 
-// Context menu paste has no clipboard event: use our elements, else try the system text
-export async function pasteFromMenu(at: Point) {
+// Menu paste has no clipboard event: use our elements (at a label position, from the
+// context menu), else try the system text
+export async function pasteFromMenu(at?: Point) {
   if (copied.length > 0) {
     pasteElements(at);
     return;

@@ -3,6 +3,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { MAX_ZOOM, MIN_ZOOM } from '$lib/constants';
 import type { MarginMode, Theme } from '$lib/types';
 import { canvas } from './canvas.svelte';
+import { labelDocument } from './document.svelte';
 import { editor } from './editor.svelte';
 import { label } from './label.svelte';
 import { output } from './output.svelte';
@@ -37,6 +38,7 @@ export function loadSettings() {
     output.copies = s.copies >= 1 ? s.copies : output.copies;
     output.printChoices = s.printChoices ?? output.printChoices;
     output.lastSaveDir = s.lastSaveDir ?? output.lastSaveDir;
+    labelDocument.lastDir = s.lastLabelDir ?? labelDocument.lastDir;
     if (s.zoom >= MIN_ZOOM && s.zoom <= MAX_ZOOM) canvas.zoom = s.zoom;
   } catch (error) {
     console.error('Failed to load settings:', error);
@@ -64,6 +66,7 @@ export function persistSettings() {
       copies: output.copies,
       printChoices: output.printChoices,
       lastSaveDir: output.lastSaveDir,
+      lastLabelDir: labelDocument.lastDir,
       zoom: canvas.zoom,
     });
     clearTimeout(saveTimer);

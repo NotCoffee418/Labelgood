@@ -128,6 +128,16 @@ function restore(json: string) {
   });
 }
 
+// Replaces the whole document (a new or opened label) and starts its undo history over
+export function replaceDocument(json: string) {
+  editor.editingBoxId = null;
+  editor.hasTextSelection = false;
+  editor.savedRange = null;
+  editor.selectedIds = [];
+  restore(json);
+  history.reset();
+}
+
 // ---- Element registration (actions) ----
 
 // Registers an element's wrapper so its rendered size can be measured

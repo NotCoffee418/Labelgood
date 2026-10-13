@@ -40,13 +40,21 @@
       ],
     },
     {
-      title: 'View and output',
+      title: 'View',
       rows: [
         ['Ctrl + wheel', 'Zoom'],
         ['Wheel', 'Scroll along the longer direction (Shift: the other)'],
         ['Middle-drag', 'Pan'],
-        ['Ctrl + P', 'Print'],
         ['F1', 'This help'],
+      ],
+    },
+    {
+      title: 'Files and output',
+      rows: [
+        ['Ctrl + N', 'New label'],
+        ['Ctrl + O', 'Open a label'],
+        ['Ctrl + S', 'Save (Shift: save as)'],
+        ['Ctrl + P', 'Print'],
       ],
     },
   ];

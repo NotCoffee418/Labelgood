@@ -1,14 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import AppHeader from '$lib/components/AppHeader.svelte';
   import ContextMenu from '$lib/components/ContextMenu.svelte';
   import HelpDialog from '$lib/components/HelpDialog.svelte';
   import LabelCanvas from '$lib/components/LabelCanvas.svelte';
+  import MenuBar from '$lib/components/MenuBar.svelte';
   import PrintDialog from '$lib/components/PrintDialog.svelte';
   import SettingsPanel from '$lib/components/SettingsPanel.svelte';
   import Toolbar from '$lib/components/Toolbar.svelte';
   import { isEditableTarget } from '$lib/dom';
   import { handleDocumentPaste } from '$lib/state/clipboard.svelte';
+  import { markStartingDocument, trackDocumentWindow } from '$lib/state/document.svelte';
   import { history } from '$lib/state/editor.svelte';
   import { initSampleBox } from '$lib/state/elements';
   import { loadFonts } from '$lib/state/fonts.svelte';
@@ -22,10 +23,12 @@
   // Restore the last used settings before anything is recorded or saved
   loadSettings();
   initSampleBox();
+  markStartingDocument();
 
   persistSettings();
   applyTheme();
   history.track();
+  trackDocumentWindow();
 
   onMount(() => {
     loadPrinters();
@@ -47,15 +50,17 @@
   ondrop={handleDocumentDrop}
 />
 
-<div class="app-container">
-  <div class="main-section">
-    <AppHeader />
-    <Toolbar />
-    <LabelCanvas />
-  </div>
+<div class="app">
+  <MenuBar />
+  <div class="app-container">
+    <div class="main-section">
+      <Toolbar />
+      <LabelCanvas />
+    </div>
 
-  <ContextMenu />
-  <SettingsPanel />
+    <ContextMenu />
+    <SettingsPanel />
+  </div>
 </div>
 
 {#if output.printDialog}
@@ -66,9 +71,16 @@
 {/if}
 
 <style>
-  .app-container {
+  .app {
     display: flex;
+    flex-direction: column;
     height: 100vh;
+  }
+
+  .app-container {
+    flex: 1;
+    min-height: 0;
+    display: flex;
     overflow: hidden;
   }
 

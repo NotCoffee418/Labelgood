@@ -49,6 +49,16 @@ export class History {
     this.canRedo = false;
   }
 
+  // Starts over from the current document, e.g. after opening a file
+  reset() {
+    clearTimeout(this.#commitTimer);
+    this.#undoStack = [];
+    this.#redoStack = [];
+    this.#lastCommitted = this.#doc.snapshot();
+    this.canUndo = false;
+    this.canRedo = false;
+  }
+
   undo() {
     this.commit();
     const previous = this.#undoStack.pop();

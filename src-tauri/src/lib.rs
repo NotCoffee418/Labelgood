@@ -126,6 +126,40 @@ async fn generate_pdf(options: PrintOptions) -> Result<String, String> {
     }
 }
 
+/// Label files: JSON written by the frontend. Only `.labelgood` files are read or
+/// written, so these commands can't be used to touch anything else.
+const DOCUMENT_EXTENSION: &str = "labelgood";
+
+fn document_path(path: &str) -> Result<&Path, String> {
+    let path = Path::new(path);
+    let is_document = path.extension().is_some_and(|ext| ext.eq_ignore_ascii_case(DOCUMENT_EXTENSION));
+    if is_document {
+        Ok(path)
+    } else {
+        Err(format!("Not a .{} file: {}", DOCUMENT_EXTENSION, path.display()))
+    }
+}
+
+/// Saves a label file. Written to a temporary file first and then moved over the
+/// target, so a failed save never leaves a half-written label behind.
+#[tauri::command]
+async fn save_document(path: String, contents: String) -> Result<(), String> {
+    let target = document_path(&path)?;
+    let mut temp = target.as_os_str().to_owned();
+    temp.push(".tmp");
+    std::fs::write(&temp, contents)
+        .and_then(|_| std::fs::rename(&temp, target))
+        .map_err(|e| {
+            let _ = std::fs::remove_file(&temp);
+            format!("Failed to save {}: {}", path, e)
+        })
+}
+
+#[tauri::command]
+async fn open_document(path: String) -> Result<String, String> {
+    std::fs::read_to_string(document_path(&path)?).map_err(|e| format!("Failed to open {}: {}", path, e))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     // WebKitGTK's DMA-BUF renderer fails on some GPU/Wayland setups (notably NVIDIA),
@@ -138,6 +172,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_opener::init())
         // Reopen at the last window size (and maximised if it was); position isn't kept,
         // so the window can't come back on a monitor that's no longer there
         .plugin(
@@ -145,7 +180,15 @@ pub fn run() {
                 .with_state_flags(StateFlags::SIZE | StateFlags::MAXIMIZED)
                 .build(),
         )
-        .invoke_handler(tauri::generate_handler![generate_pdf, list_printers, printer_options, list_fonts, default_fonts])
+        .invoke_handler(tauri::generate_handler![
+            generate_pdf,
+            list_printers,
+            printer_options,
+            list_fonts,
+            default_fonts,
+            save_document,
+            open_document
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
