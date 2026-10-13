@@ -2,7 +2,8 @@
 <script lang="ts">
   import { label } from '$lib/state/label.svelte';
   import {
-    choiceFor, clampCopies, closePrintDialog, loadPrinterOptions, output, printFromDialog, refreshPrinters, setChoice,
+    choiceFor, clampCopies, closePrintDialog, hasPrintChoices, loadPrinterOptions, output, printFromDialog, refreshPrinters,
+    resetPrintChoices, setChoice,
   } from '$lib/state/output.svelte';
 
   let { preview }: { preview: string } = $props();
@@ -83,6 +84,14 @@
               </select>
             </label>
           {/each}
+          {#if output.visiblePrintOptions.length > 0}
+            <button
+              class="reset-options-btn"
+              onclick={resetPrintChoices}
+              disabled={!hasPrintChoices()}
+              title="Forget the options chosen for this printer"
+            >Reset to defaults</button>
+          {/if}
         {/if}
       </div>
     </div>
@@ -212,6 +221,26 @@
 
   .refresh-printers-btn:hover {
     background-color: var(--neutral-hover);
+  }
+
+  .reset-options-btn {
+    padding: 0;
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    font-size: 13px;
+    text-decoration: underline;
+    cursor: pointer;
+  }
+
+  .reset-options-btn:hover:not(:disabled) {
+    color: var(--text);
+  }
+
+  .reset-options-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+    text-decoration: none;
   }
 
   .no-printers-text {

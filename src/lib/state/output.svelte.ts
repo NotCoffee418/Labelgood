@@ -78,11 +78,20 @@ function choiceKey(option: PrinterOption): string {
   return option.key === 'MediaType' ? `MediaType@${label.isContinuous ? 'continuous' : 'die-cut'}` : option.key;
 }
 
-// Sensible defaults: cut after each label, media type matching the label
+// Option and choice names without their namespace (Windows keys are "uri|name")
+const localName = (key: string) => key.slice(key.lastIndexOf('|') + 1);
+
+// Sensible defaults: cut after each label, media type matching the label, and black
+// only. Two-colour (black/red) needs a matching roll; on any other roll the printer
+// rejects the job, whatever the label's colours.
 function suggestedChoice(option: PrinterOption): string | undefined {
-  const pick = (value: string) => option.choices.includes(value) ? value : undefined;
-  if (option.key === 'CutMedia') return pick('EndOfPage');
-  if (option.key === 'MediaType') return pick(label.isContinuous ? 'Roll' : 'Labels');
+  const pick = (value: string) => option.choices.find(choice => localName(choice) === value);
+  switch (localName(option.key)) {
+    case 'CutMedia': return pick('EndOfPage');
+    case 'MediaType': return pick(label.isContinuous ? 'Roll' : 'Labels');
+    case 'PageOutputColor': return pick('Monochrome');
+    case 'ColorModel': return pick('Gray');
+  }
   return undefined;
 }
 
@@ -91,6 +100,14 @@ export function choiceFor(option: PrinterOption): string {
   if (saved && option.choices.includes(saved)) return saved;
   return suggestedChoice(option) ?? option.default ?? option.choices[0];
 }
+
+// Forgets the choices made for the selected printer, back to the defaults above
+export function resetPrintChoices() {
+  const { [output.selectedPrinter]: _, ...others } = output.printChoices;
+  output.printChoices = others;
+}
+
+export const hasPrintChoices = () => Object.keys(output.printChoices[output.selectedPrinter] ?? {}).length > 0;
 
 export function setChoice(option: PrinterOption, value: string) {
   const printer = output.selectedPrinter;
